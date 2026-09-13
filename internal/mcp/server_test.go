@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"hermes-security-skills/internal/capability"
 	"hermes-security-skills/internal/jobs"
 	"hermes-security-skills/internal/policy"
+	"hermes-security-skills/internal/proxycore"
 	"hermes-security-skills/internal/scope"
 )
 
@@ -50,6 +52,14 @@ func testRegistry(t *testing.T, extra map[string]any) *capability.Registry {
 			"risk": "low", "default_provider": "proxy",
 			"requires_scope": false, "requires_network": false,
 		},
+		"response_comparison": map[string]any{
+			"risk": "low", "default_provider": "proxy",
+			"requires_scope": true, "requires_network": false,
+		},
+		"json_diff": map[string]any{
+			"risk": "low", "default_provider": "local",
+			"requires_scope": false, "requires_network": false,
+		},
 	}
 	for k, v := range extra {
 		caps[k] = v
@@ -62,18 +72,20 @@ func testRegistry(t *testing.T, extra map[string]any) *capability.Registry {
 }
 
 // newTestServer: server lengkap dengan scope allowlist localhost:8901 dan
-// approval store sementara.
+// approval store sementara. Bila mutate tidak mengganti EvidenceDir, server
+// memakai evidence dir fixture (2 entri: orders/1 GET 200, orders/2 POST 404).
 func newTestServer(t *testing.T, extraCaps map[string]any, mutate func(*Config)) (*Server, *approval.Store) {
 	t.Helper()
 	store := approval.OpenStore(filepath.Join(t.TempDir(), "approvals.json"))
 	cfg := Config{
-		Registry:  testRegistry(t, extraCaps),
-		Policy:    testPolicy(),
-		Scope:     mustChecker(t, []string{"localhost:8901"}),
-		ProxyURL:  "http://proxy-unused", // diganti per-test bila perlu
-		Store:     store,
-		JobsDir:   t.TempDir(),
-		Audit:     func(string, map[string]any) error { return nil },
+		Registry:    testRegistry(t, extraCaps),
+		Policy:      testPolicy(),
+		Scope:       mustChecker(t, []string{"localhost:8901"}),
+		ProxyURL:    "http://proxy-unused", // diganti per-test bila perlu
+		Store:       store,
+		JobsDir:     t.TempDir(),
+		EvidenceDir: writeTestEvidence(t),
+		Audit:       func(string, map[string]any) error { return nil },
 	}
 	if mutate != nil {
 		mutate(&cfg)
@@ -83,6 +95,53 @@ func newTestServer(t *testing.T, extraCaps map[string]any, mutate func(*Config))
 		t.Fatalf("NewServer: %v", err)
 	}
 	return srv, store
+}
+
+// writeTestEvidence membuat evidence fixture via proxycore (format identik
+// dengan hermes-proxy) dan mengembalikan path dir-nya.
+func writeTestEvidence(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	es, err := proxycore.NewEvidenceStore(dir)
+	if err != nil {
+		t.Fatalf("NewEvidenceStore: %v", err)
+	}
+	base := proxycore.EvidenceRequest{
+		Method:       "GET",
+		URL:          "http://localhost:8901/orders/1",
+		Headers:      proxycore.RedactHeaders(http.Header{"Authorization": {"Bearer sekret"}}),
+		BodyEncoding: "base64",
+	}
+	resp1 := proxycore.EvidenceResponse{
+		Status:       200,
+		Headers:      proxycore.RedactHeaders(http.Header{"Content-Type": {"application/json"}}),
+		BodyBase64:   base64.StdEncoding.EncodeToString([]byte(`{"id":1}`)),
+		BodyEncoding: "base64",
+	}
+	rec2 := proxycore.EvidenceRecord{
+		Request: proxycore.EvidenceRequest{
+			Method:       "POST",
+			URL:          "http://localhost:8901/orders/1/status",
+			Headers:      proxycore.RedactHeaders(http.Header{}),
+			BodyBase64:   base64.StdEncoding.EncodeToString([]byte(`{"state":"shipped"}`)),
+			BodyEncoding: "base64",
+		},
+		Response: proxycore.EvidenceResponse{
+			Status:       404,
+			Headers:      proxycore.RedactHeaders(http.Header{"Content-Type": {"application/json"}}),
+			BodyBase64:   base64.StdEncoding.EncodeToString([]byte(`{"error":"not found"}`)),
+			BodyEncoding: "base64",
+		},
+	}
+	for _, rec := range []proxycore.EvidenceRecord{
+		{Request: base, Response: resp1},
+		rec2,
+	} {
+		if _, _, err := es.Write(rec); err != nil {
+			t.Fatalf("Write evidence: %v", err)
+		}
+	}
+	return dir
 }
 
 func mustChecker(t *testing.T, hosts []string) *scope.Checker {
@@ -180,19 +239,15 @@ func TestPing(t *testing.T) {
 }
 
 func TestToolsListOneToolPerCapability(t *testing.T) {
-	srv, _ := newTestServer(t, map[string]any{
-		"json_diff": map[string]any{
-			"risk": "low", "default_provider": "local",
-			"requires_scope": false, "requires_network": false,
-		},
-	}, nil)
+	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 2, "tools/list", nil))
 	res := resps[0]["result"].(map[string]any)
 	tools, _ := res["tools"].([]any)
-	if len(tools) != 4 { // 3 default + json_diff
-		t.Fatalf("mau 4 tool, dapat %d", len(tools))
+	if len(tools) != 5 { // request_replay, inspect_request, list_history, response_comparison, json_diff
+		t.Fatalf("mau 5 tool, dapat %d", len(tools))
 	}
-	// Schema: request_replay (network) wajib url+method; list_history kosong.
+	// Schema: request_replay (network) wajib url+method; list_history punya
+	// schema filter read-only.
 	var replaySchema, histSchema map[string]any
 	for _, raw := range tools {
 		tl := raw.(map[string]any)
@@ -204,6 +259,18 @@ func TestToolsListOneToolPerCapability(t *testing.T) {
 			}
 		case "list_history":
 			histSchema = tl["inputSchema"].(map[string]any)
+		case "response_comparison":
+			schema := tl["inputSchema"].(map[string]any)
+			req, _ := schema["required"].([]any)
+			if len(req) != 2 {
+				t.Errorf("response_comparison required = %v, mau [evidence_ref_a evidence_ref_b]", req)
+			}
+		case "json_diff":
+			schema := tl["inputSchema"].(map[string]any)
+			req, _ := schema["required"].([]any)
+			if len(req) != 2 {
+				t.Errorf("json_diff required = %v, mau [json_a json_b]", req)
+			}
 		}
 	}
 	req, _ := replaySchema["required"].([]any)
@@ -216,8 +283,14 @@ func TestToolsListOneToolPerCapability(t *testing.T) {
 			t.Errorf("request_replay schema kurang field %q: %v", f, props)
 		}
 	}
-	if _, ok := histSchema["properties"]; ok {
-		t.Errorf("list_history (read-only) schema harus {} — dapat %v", histSchema)
+	hprops, _ := histSchema["properties"].(map[string]any)
+	for _, f := range []string{"limit", "url_substring", "method", "status_min"} {
+		if _, ok := hprops[f]; !ok {
+			t.Errorf("list_history schema kurang field %q: %v", f, hprops)
+		}
+	}
+	if _, ok := histSchema["required"]; ok {
+		t.Errorf("list_history tidak punya required: %v", histSchema)
 	}
 }
 
@@ -430,18 +503,302 @@ func TestToolsCallAbortedCaseDenied(t *testing.T) {
 	}
 }
 
-func TestToolsCallReadOnlyStub(t *testing.T) {
+// list_history kini NYATA: index event store dari --evidence-dir.
+func TestToolsCallListHistoryFromEventStore(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 12, "tools/call", map[string]any{
 		"name": "list_history", "arguments": map[string]any{},
 	}))
-	res := resps[0]["result"].(map[string]any)
-	if res["isError"] == true {
-		t.Fatalf("read-only tidak boleh error: %v", res)
+	res, ok := resps[0]["result"].(map[string]any)
+	if !ok || res["isError"] == true {
+		t.Fatalf("list_history harus sukses: %v", resps[0])
+	}
+	content := res["content"].([]any)[0].(map[string]any)
+	var body struct {
+		Status   string `json:"status"`
+		Provider string `json:"provider"`
+		Count    int    `json:"count"`
+		Entries  []struct {
+			Seq         int64  `json:"seq"`
+			URL         string `json:"url"`
+			Method      string `json:"method"`
+			Status      int    `json:"status"`
+			EvidenceRef string `json:"evidence_ref"`
+			SHA256      string `json:"sha256"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatalf("payload bukan JSON: %v (%s)", err, content["text"])
+	}
+	if body.Status != "observed" || body.Provider != "event-store" {
+		t.Fatalf("status/provider salah: %+v", body)
+	}
+	if body.Count != 2 || len(body.Entries) != 2 {
+		t.Fatalf("mau 2 entry nyata, dapat %d (%d)", body.Count, len(body.Entries))
+	}
+	e1 := body.Entries[0]
+	if e1.Seq != 1 || e1.Method != "GET" || e1.Status != 200 ||
+		e1.URL != "http://localhost:8901/orders/1" || e1.EvidenceRef != "evidence-000001.json" || len(e1.SHA256) != 64 {
+		t.Errorf("entry[0] salah: %+v", e1)
+	}
+	if body.Entries[1].Method != "POST" || body.Entries[1].Status != 404 {
+		t.Errorf("entry[1] salah: %+v", body.Entries[1])
+	}
+}
+
+func TestToolsCallListHistoryFilterAndLimit(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	resps := runServer(t, srv, mustRequest(t, 20, "tools/call", map[string]any{
+		"name": "list_history",
+		"arguments": map[string]any{
+			"url_substring": "orders/1/status", "method": "post", "status_min": 300,
+		},
+	}))
+	content := resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)
+	var body struct {
+		Count   int `json:"count"`
+		Entries []struct {
+			Seq int64 `json:"seq"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Count != 1 || len(body.Entries) != 1 || body.Entries[0].Seq != 2 {
+		t.Errorf("filter salah: %+v", body)
+	}
+	// Limit mempertahankan entri terbaru.
+	resps = runServer(t, srv, mustRequest(t, 21, "tools/call", map[string]any{
+		"name": "list_history", "arguments": map[string]any{"limit": 1},
+	}))
+	content = resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Count != 1 || body.Entries[0].Seq != 2 {
+		t.Errorf("limit harus ambil terbaru: %+v", body)
+	}
+}
+
+func TestToolsCallInspectRequestFromEventStore(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	resps := runServer(t, srv, mustRequest(t, 22, "tools/call", map[string]any{
+		"name": "inspect_request",
+		"arguments": map[string]any{
+			"evidence_ref": "evidence-000001.json",
+		},
+	}))
+	res, ok := resps[0]["result"].(map[string]any)
+	if !ok || res["isError"] == true {
+		t.Fatalf("inspect_request harus sukses: %v", resps[0])
+	}
+	content := res["content"].([]any)[0].(map[string]any)
+	var body struct {
+		Status string `json:"status"`
+		Detail struct {
+			EvidenceRef string `json:"evidence_ref"`
+			Seq         int64  `json:"seq"`
+			Request     struct {
+				Method  string              `json:"method"`
+				URL     string              `json:"url"`
+				Headers map[string][]string `json:"headers"`
+			} `json:"request"`
+			Response struct {
+				Status  int                 `json:"status"`
+				Body    string              `json:"body"`
+				Headers map[string][]string `json:"headers"`
+			} `json:"response"`
+		} `json:"detail"`
+	}
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatalf("payload bukan JSON: %v", err)
+	}
+	if body.Status != "observed" || body.Detail.Seq != 1 ||
+		body.Detail.Request.Method != "GET" || body.Detail.Request.URL != "http://localhost:8901/orders/1" {
+		t.Fatalf("detail salah: %+v", body)
+	}
+	if body.Detail.Response.Status != 200 || body.Detail.Response.Body != `{"id":1}` {
+		t.Errorf("response detail salah: %+v", body.Detail.Response)
+	}
+	// Header tetap ter-redaksi seperti di evidence file (§24/§25).
+	auth := body.Detail.Request.Headers["Authorization"]
+	if len(auth) != 1 || auth[0] != "[REDACTED]" {
+		t.Errorf("Authorization harus [REDACTED], dapat %v", auth)
+	}
+}
+
+func TestToolsCallInspectRequestFailClosed(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	// Ref tidak ada → -32602.
+	resps := runServer(t, srv, mustRequest(t, 23, "tools/call", map[string]any{
+		"name": "inspect_request", "arguments": map[string]any{"evidence_ref": "evidence-999999.json"},
+	}))
+	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
+		t.Errorf("ref tidak ada harus -32602, dapat %v", resps[0])
+	}
+	// Path traversal ditolak.
+	resps = runServer(t, srv, mustRequest(t, 24, "tools/call", map[string]any{
+		"name": "inspect_request", "arguments": map[string]any{"evidence_ref": "../evidence-000001.json"},
+	}))
+	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
+		t.Errorf("path traversal harus -32602, dapat %v", resps[0])
+	}
+	// Argumen hilang.
+	resps = runServer(t, srv, mustRequest(t, 25, "tools/call", map[string]any{
+		"name": "inspect_request", "arguments": map[string]any{},
+	}))
+	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
+		t.Errorf("evidence_ref hilang harus -32602, dapat %v", resps[0])
+	}
+}
+
+func TestToolsCallResponseComparisonRealDiff(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	resps := runServer(t, srv, mustRequest(t, 26, "tools/call", map[string]any{
+		"name": "response_comparison",
+		"arguments": map[string]any{
+			"evidence_ref_a": "evidence-000001.json",
+			"evidence_ref_b": "evidence-000002.json",
+		},
+	}))
+	res, ok := resps[0]["result"].(map[string]any)
+	if !ok || res["isError"] == true {
+		t.Fatalf("response_comparison harus sukses: %v", resps[0])
+	}
+	content := res["content"].([]any)[0].(map[string]any)
+	var body struct {
+		Status       string `json:"status"`
+		StatusA      int    `json:"status_a"`
+		StatusB      int    `json:"status_b"`
+		Observations []struct {
+			Type   string `json:"type"`
+			Detail string `json:"detail"`
+		} `json:"observations"`
+	}
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatalf("payload bukan JSON: %v", err)
+	}
+	if body.Status != "observed" || body.StatusA != 200 || body.StatusB != 404 {
+		t.Fatalf("header comparison salah: %+v", body)
+	}
+	types := map[string]bool{}
+	for _, o := range body.Observations {
+		types[o.Type] = true
+		if o.Detail == "" {
+			t.Errorf("observation tanpa detail: %+v", o)
+		}
+	}
+	if !types["status_diff"] || !types["body_diff"] {
+		t.Errorf("harus ada status_diff dan body_diff (beda status + beda body): %+v", body.Observations)
+	}
+}
+
+func TestToolsCallJSONDiffReal(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	resps := runServer(t, srv, mustRequest(t, 27, "tools/call", map[string]any{
+		"name": "json_diff",
+		"arguments": map[string]any{
+			"json_a": map[string]any{"a": 1, "b": "sama"},
+			"json_b": map[string]any{"a": 2, "b": "sama"},
+		},
+	}))
+	res, ok := resps[0]["result"].(map[string]any)
+	if !ok || res["isError"] == true {
+		t.Fatalf("json_diff harus sukses: %v", resps[0])
+	}
+	content := res["content"].([]any)[0].(map[string]any)
+	var body struct {
+		Status       string `json:"status"`
+		Provider     string `json:"provider"`
+		Observations []struct {
+			Type   string `json:"type"`
+			Detail string `json:"detail"`
+		} `json:"observations"`
+	}
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatalf("payload bukan JSON: %v", err)
+	}
+	if body.Status != "observed" || body.Provider != "local" {
+		t.Fatalf("status/provider salah: %+v", body)
+	}
+	if len(body.Observations) != 1 || body.Observations[0].Type != "json_diff" ||
+		!strings.Contains(body.Observations[0].Detail, "$.a: 1 -> 2") {
+		t.Errorf("diff salah: %#v", body.Observations)
+	}
+	// Identik = kosong; argumen hilang = -32602.
+	resps = runServer(t, srv, mustRequest(t, 28, "tools/call", map[string]any{
+		"name": "json_diff",
+		"arguments": map[string]any{
+			"json_a": map[string]any{"a": 1}, "json_b": map[string]any{"a": 1},
+		},
+	}))
+	content = resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)
+	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Observations) != 0 {
+		t.Errorf("json identik harus tanpa observation: %#v", body.Observations)
+	}
+	resps = runServer(t, srv, mustRequest(t, 29, "tools/call", map[string]any{
+		"name": "json_diff", "arguments": map[string]any{"json_a": map[string]any{}},
+	}))
+	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
+		t.Errorf("json_b hilang harus -32602, dapat %v", resps[0])
+	}
+}
+
+// Read-only capability TANPA provider lokal (openapi_analysis/docker) tetap
+// stub informatif — jujur, tidak mengeksekusi apa pun.
+func TestToolsCallReadOnlyFallbackStub(t *testing.T) {
+	srv, _ := newTestServer(t, map[string]any{
+		"openapi_analysis": map[string]any{
+			"risk": "low", "default_provider": "docker",
+			"requires_scope": false, "requires_network": false,
+		},
+	}, nil)
+	resps := runServer(t, srv, mustRequest(t, 30, "tools/call", map[string]any{
+		"name": "openapi_analysis", "arguments": map[string]any{},
+	}))
+	res, ok := resps[0]["result"].(map[string]any)
+	if !ok || res["isError"] == true {
+		t.Fatalf("fallback stub tidak boleh error: %v", resps[0])
 	}
 	content := res["content"].([]any)[0].(map[string]any)
 	if !strings.Contains(content["text"].(string), "stub") {
-		t.Errorf("read-only harus balas stub informatif: %v", content["text"])
+		t.Errorf("fallback harus stub informatif: %v", content["text"])
+	}
+}
+
+// Kill switch §10 tetap berlaku untuk operasi read-only bila 'case' disertakan.
+func TestToolsCallReadOnlyAbortedCaseDenied(t *testing.T) {
+	jobsRoot := t.TempDir()
+	if _, err := jobs.MarkAborted(jobsRoot, "case-abort"); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := newTestServer(t, nil, func(c *Config) { c.JobsDir = jobsRoot })
+	resps := runServer(t, srv, mustRequest(t, 31, "tools/call", map[string]any{
+		"name":      "list_history",
+		"arguments": map[string]any{"case": "case-abort"},
+	}))
+	res, ok := resps[0]["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result hilang: %v", resps[0])
+	}
+	content := res["content"].([]any)[0].(map[string]any)
+	if res["isError"] != true || !strings.Contains(content["text"].(string), "abort") {
+		t.Errorf("case aborted harus ditolak walau read-only: %v", content["text"])
+	}
+}
+
+// Tanpa --evidence-dir, tool event store menolak dengan pesan jelas
+// (fail-closed, tanpa silent degrade).
+func TestToolsCallEventStoreWithoutEvidenceDir(t *testing.T) {
+	srv, _ := newTestServer(t, nil, func(c *Config) { c.EvidenceDir = "" })
+	resps := runServer(t, srv, mustRequest(t, 32, "tools/call", map[string]any{
+		"name": "list_history", "arguments": map[string]any{},
+	}))
+	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
+		t.Errorf("evidence-dir kosong harus -32602, dapat %v", resps[0])
 	}
 }
 
@@ -458,7 +815,7 @@ func TestToolsCallProxyDownFailClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	resps := runServer(t, srv, mustRequest(t, 13, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name":      "request_replay",
 		"arguments": map[string]any{"url": "http://localhost:8901/", "method": "GET", "case": "c"},
 	}))
 	res := resps[0]["result"].(map[string]any)

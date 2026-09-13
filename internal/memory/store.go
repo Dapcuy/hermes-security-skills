@@ -115,6 +115,15 @@ func (s *Store) Ingest(path string, meta IngestMeta) (*Entry, error) {
 	if e.Provenance.Trust == TrustUntrusted {
 		return nil, fmt.Errorf("%w: entry %s berasal dari target (trust=untrusted) dan tidak boleh masuk knowledge base — gunakan jalur case memory", ErrFirewall, e.ID)
 	}
+	// Tripwire firewall (§24, adversarial): provenance.source
+	// "target-controlled" adalah cap yang dipasang SISTEM pada konten target
+	// (IngestFromTarget) dan tidak pernah dipakai konten manusia. File yang
+	// membawa cap ini tidak boleh di-ingest walau frontmatter-nya dipalsukan
+	// trust=trusted — mengganti klaim trust tanpa mengganti sumber bukan
+	// review sungguhan. (Review manusia yang sah menulis ulang sumbernya.)
+	if e.Provenance.Source == SourceTargetControlled {
+		return nil, fmt.Errorf("%w: entry %s membawa cap provenance.source=%q — konten asal target tidak boleh masuk knowledge base via ingest (§24)", ErrFirewall, e.ID, SourceTargetControlled)
+	}
 	// Human-in-the-loop: ingest hanya boleh menghasilkan state pra-review.
 	switch e.State {
 	case "", StateCaptured, StateNormalized, StateProposed:
@@ -199,13 +208,20 @@ func (s *Store) List(f Filter) ([]*Entry, error) {
 		}
 	}
 	// Case memory: memory/cases/<caseID>/<id>.md (satu level case).
+	// Dedup case memory PAKA-CASE (kunci = caseDir + "/" + id): entry dengan
+	// id sama di dua case adalah dua bukti berbeda — keduanya harus tetap
+	// terlihat, tidak boleh saling menyembunyikan (§27 case isolation).
 	caseEntries, err := s.scanCases()
 	if err != nil {
 		return nil, err
 	}
 	for _, e := range caseEntries {
-		if !seen[e.ID] {
-			seen[e.ID] = true
+		key := e.ID
+		if e.Path != "" {
+			key = filepath.Base(filepath.Dir(e.Path)) + "/" + e.ID
+		}
+		if !seen[key] {
+			seen[key] = true
 			out = append(out, e)
 		}
 	}
@@ -329,24 +345,39 @@ func (s *Store) Get(id string) (*Entry, error) {
 // reviewed/trusted — konten target tidak pernah menulis canonical knowledge.
 // Cek firewall didahulukan atas validasi transisi agar pesan error
 // menunjukkan penyebab keamanannya, bukan sekadar transisi salah.
+//
+// Catatan id duplikat lintas case: bila id yang sama ada di beberapa case,
+// Get menemukan file pertama (urut nama case) — operasi CLI pada satu id
+// berlaku deterministik pada file itu. Operasi batch (Retention, MarkStale)
+// bekerja per-file sehingga bebas ambiguitas ini (§27 case isolation).
 func (s *Store) SetState(id string, newState State) (*Entry, error) {
 	e, err := s.Get(id)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.setStateFile(e, newState); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+// setStateFile menerapkan transisi state pada SATU entry (hasil scan, dengan
+// e.Path terisi) tanpa me-resolve ulang berdasarkan id — mencegah operasi
+// batch menulis file milik case lain saat id duplikat lintas case.
+func (s *Store) setStateFile(e *Entry, newState State) error {
 	if e.State == newState {
-		return nil, fmt.Errorf("%w: %s sudah berada di state %q", ErrInvalidTransition, id, newState)
+		return fmt.Errorf("%w: %s sudah berada di state %q", ErrInvalidTransition, e.ID, newState)
 	}
 	// Firewall dulu (§24): konten target tidak boleh mencapai knowledge
 	// base ber-review apapun kondisi transisinya.
 	if e.Provenance.Trust == TrustUntrusted {
 		switch newState {
 		case StateReviewed, StateTrusted:
-			return nil, fmt.Errorf("%w: konten target-controlled (id %s) tidak boleh dipromosikan ke %q — hanya boleh sampai di case memory (§24)", ErrFirewall, id, newState)
+			return fmt.Errorf("%w: konten target-controlled (id %s) tidak boleh dipromosikan ke %q — hanya boleh sampai di case memory (§24)", ErrFirewall, e.ID, newState)
 		}
 	}
 	if !CanTransition(e.State, newState) {
-		return nil, fmt.Errorf("%w: %s tidak boleh %s -> %s", ErrInvalidTransition, id, e.State, newState)
+		return fmt.Errorf("%w: %s tidak boleh %s -> %s", ErrInvalidTransition, e.ID, e.State, newState)
 	}
 	// Re-review manusia (menuju reviewed) memperbarui last_reviewed —
 	// dasar perhitungan staleness berikutnya.
@@ -356,48 +387,44 @@ func (s *Store) SetState(id string, newState State) (*Entry, error) {
 	e.State = newState
 	if newState == StateStale || newState == StateArchived {
 		// stale/archived tidak memindahkan file; cukup frontmatter.
-		if err := s.rewriteInPlace(e); err != nil {
-			return nil, err
-		}
-		return e, nil
+		return s.writeFileAt(e)
 	}
-	dst := s.knowledgeDir(newState)
-	old := s.findEntryFile(e.ID)
 	// Konten target (untrusted) SELALU tinggal di case memory — transisi
 	// state apapun tidak boleh memindahkannya ke direktori knowledge (§24).
 	if e.Provenance.Trust == TrustUntrusted {
-		if err := s.rewriteInPlace(e); err != nil {
-			return nil, err
-		}
-		return e, nil
+		return s.writeFileAt(e)
 	}
+	dst := s.knowledgeDir(newState)
 	if err := s.writeEntry(e, dst); err != nil {
-		return nil, err
+		return err
 	}
 	// Move semantics: hapus file lama agar tidak ada salinan bermata dua
 	// (salinan lama akan membingungkan Get/Parse dengan state usang).
-	if old != "" && filepath.Clean(old) != filepath.Clean(entryPath(dst, e.ID)) {
-		if err := os.Remove(old); err != nil {
-			return nil, fmt.Errorf("memory: hapus file lama %s: %w", old, err)
+	if e.Path != "" && filepath.Clean(e.Path) != filepath.Clean(entryPath(dst, e.ID)) {
+		if err := os.Remove(e.Path); err != nil {
+			return fmt.Errorf("memory: hapus file lama %s: %w", e.Path, err)
 		}
 	}
-	return e, nil
+	return nil
 }
 
-// rewriteInPlace menimpa file entry yang sudah ada dengan state baru.
-// Aman karena file itu sendiri adalah tempat state disimpan (append-only
-// tidak berlaku untuk file entry; audit trail ada di audit log).
-func (s *Store) rewriteInPlace(e *Entry) error {
-	old := s.findEntryFile(e.ID)
-	if old == "" {
-		return fmt.Errorf("%w: file entry %s tidak ditemukan untuk ditulis ulang", ErrNotFound, e.ID)
+// writeFileAt menulis ulang entry ke file sumbernya (e.Path wajib terisi —
+// entry hasil scan/Get). Pengganti rewriteInPlace berbasis pencarian id agar
+// penulisan selalu tepat ke file yang sedang diproses.
+func (s *Store) writeFileAt(e *Entry) error {
+	if e.Path == "" {
+		if old := s.findEntryFile(e.ID); old != "" {
+			e.Path = old
+		} else {
+			return fmt.Errorf("%w: file entry %s tidak ditemukan untuk ditulis ulang", ErrNotFound, e.ID)
+		}
 	}
 	data, err := renderEntry(e)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(old, data, 0o644); err != nil {
-		return fmt.Errorf("memory: tulis %s: %w", old, err)
+	if err := os.WriteFile(e.Path, data, 0o644); err != nil {
+		return fmt.Errorf("memory: tulis %s: %w", e.Path, err)
 	}
 	return nil
 }
@@ -438,11 +465,25 @@ func (s *Store) caseDirs() []string {
 // MarkStale menandai entry yang last_reviewed-nya lebih tua dari 90 hari
 // menjadi state=stale (§41 stale knowledge detection). Mengembalikan id
 // yang ditandai. Entry untrusted di case memory ikut dievaluasi.
+//
+// Operasi per-file (setStateFile): entry dengan id sama di beberapa case
+// ditandai masing-masing — bukan menulis file case pertama berulang kali.
 func (s *Store) MarkStale(now time.Time) ([]string, error) {
-	all, err := s.List(Filter{})
+	var all []*Entry
+	for _, dir := range s.knowledgeScanDirs() {
+		if err := scanEntries(dir, func(e *Entry) error {
+			all = append(all, e)
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	caseEntries, err := s.scanCases()
 	if err != nil {
 		return nil, err
 	}
+	all = append(all, caseEntries...)
+
 	var marked []string
 	for _, e := range all {
 		if e.State == StateStale || e.State == StateArchived {
@@ -451,7 +492,7 @@ func (s *Store) MarkStale(now time.Time) ([]string, error) {
 		if now.Sub(e.LastReviewed) <= staleAfter {
 			continue
 		}
-		if _, err := s.SetState(e.ID, StateStale); err != nil {
+		if err := s.setStateFile(e, StateStale); err != nil {
 			return nil, fmt.Errorf("memory: tandai stale %s: %w", e.ID, err)
 		}
 		marked = append(marked, e.ID)
@@ -503,8 +544,9 @@ func (s *Store) Retention(caseID string, now time.Time) (*RetentionResult, error
 			res.ArchivedEntries = append(res.ArchivedEntries, e.ID)
 		case expired:
 			// Force arsip: transisi *→archived valid untuk semua state
-			// pra-arsip; lewat SetState agar tetap satu jalur validasi.
-			if _, err := s.SetState(e.ID, StateArchived); err != nil {
+			// pra-arsip. Per-file (setStateFile) — id yang sama di case lain
+			// tidak boleh ikut tersentuh (§27 case isolation).
+			if err := s.setStateFile(e, StateArchived); err != nil {
 				return nil, fmt.Errorf("memory: arsip entry %s: %w", e.ID, err)
 			}
 			res.ArchivedEntries = append(res.ArchivedEntries, e.ID)

@@ -94,11 +94,14 @@ func TestExecuteFailClosed(t *testing.T) {
 		t.Error("task nil harus error")
 	}
 	if _, err := Execute(&Task{TaskID: "t"}); err == nil {
-		t.Error("tanpa json_a/json_b harus error")
+		t.Error("tanpa input harus error")
 	}
-	bad := Task{TaskID: "t", JsonA: json.RawMessage("{bukan"), JsonB: json.RawMessage("null")}
+	if _, err := Execute(&Task{TaskID: "t", Input: &Input{}}); err == nil {
+		t.Error("tanpa input.json_a/input.json_b harus error (kontrak 17)")
+	}
+	bad := Task{TaskID: "t", Input: &Input{JsonA: json.RawMessage("{bukan"), JsonB: json.RawMessage("null")}}
 	if _, err := Execute(&bad); err == nil {
-		t.Error("json_a rusak harus error")
+		t.Error("input.json_a rusak harus error")
 	}
 }
 
@@ -106,7 +109,7 @@ func TestRunEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "task.json")
 	out := filepath.Join(dir, "result.json")
-	content := `{"task_id":"jd-1","json_a":{"x":1},"json_b":{"x":2}}`
+	content := `{"task_id":"jd-1","input":{"json_a":{"x":1},"json_b":{"x":2}}}`
 	if err := os.WriteFile(in, []byte(content), 0o600); err != nil {
 		t.Fatalf("tulis input: %v", err)
 	}
@@ -139,9 +142,9 @@ func TestRunFailClosed(t *testing.T) {
 	if _, err := Run(in, filepath.Join(dir, "out.json")); err == nil {
 		t.Error("input rusak harus error")
 	}
-	// Tanpa json_b.
+	// Tanpa input.json_b.
 	missing := filepath.Join(dir, "missing.json")
-	if err := os.WriteFile(missing, []byte(`{"task_id":"x","json_a":{}}`), 0o600); err != nil {
+	if err := os.WriteFile(missing, []byte(`{"task_id":"x","input":{"json_a":{}}}`), 0o600); err != nil {
 		t.Fatalf("tulis: %v", err)
 	}
 	if _, err := Run(missing, filepath.Join(dir, "out.json")); err == nil {

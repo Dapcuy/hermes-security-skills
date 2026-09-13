@@ -219,3 +219,202 @@ func TestPBKDF2Vectors(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Adversarial tests (security review): setiap kasus di bawah adalah vektor
+// serangan nyata. Yang lulus = bypass yang harus diperbaiki di vault.go /
+// pbkdf2.go. Keputusan terdokumentasi: passphrase kosong dan secret kosong
+// DITOLAK (fail-closed, bukan diterima dengan konvensi) — Open/Add menolak
+// eksplisit, lihat TestVaultWrongPassphraseFailClosed dan
+// TestVaultAddFailClosedInputs.
+// ---------------------------------------------------------------------------
+
+// TestAdversarialVaultTamperMatrix: setiap byte header/salt/nonce/ciphertext
+// yang diubah, atau file yang di-truncate/di-replace, HARUS gagal dibuka
+// dengan ErrPassphrase — tidak ada satu byte pun yang boleh diubah tanpa
+// terdeteksi (tamper-evident, GCM auth).
+func TestAdversarialVaultTamperMatrix(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vault.enc")
+	v := openTestVault(t, path, "pass")
+	if err := v.Add("acct", "p", "rahasia", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	orig, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orig) <= headerSize+nonceSize {
+		t.Fatalf("test bug: file vault terlalu kecil (%d byte)", len(orig))
+	}
+
+	flip := func(src []byte, off int) []byte {
+		cp := append([]byte(nil), src...)
+		cp[off] ^= 0x01
+		return cp
+	}
+	// Konstanta offset mengikuti format file (lihat komentar vault.go):
+	// 0..7 magic, 8 versi, 9..24 salt, 25..36 nonce, 37.. ciphertext.
+	cases := []struct {
+		name string
+		data []byte
+	}{
+		{"flip magic", flip(orig, 0)},
+		{"flip versi", flip(orig, len(vaultMagic))},
+		{"flip salt depan", flip(orig, len(vaultMagic)+1)},
+		{"flip salt belakang", flip(orig, headerSize-1)},
+		{"flip nonce", flip(orig, headerSize)},
+		{"flip ciphertext depan", flip(orig, headerSize+nonceSize)},
+		{"flip ciphertext tengah", flip(orig, headerSize+nonceSize+3)},
+		{"flip ciphertext belakang", flip(orig, len(orig)-1)},
+		{"truncate header-1", orig[:headerSize-1]},
+		{"truncate header saja (tanpa ciphertext)", orig[:headerSize]},
+		{"truncate ciphertext pendek", orig[:headerSize+4]},
+		{"replace JSON valid tanpa entri (tanpa magic)", []byte(`{"acct":{"account_id":"acct","secret":"palsu"}}`)},
+		{"file kosong", []byte{}},
+	}
+	for _, tc := range cases {
+		p := filepath.Join(t.TempDir(), "vault.enc")
+		if err := os.WriteFile(p, tc.data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Open(p, "pass")
+		if err == nil {
+			t.Errorf("BYPASS: Open(%q) = nil — vault harus gagal dibuka (%s)", tc.name, tc.name)
+			continue
+		}
+		if !errors.Is(err, ErrPassphrase) {
+			t.Errorf("Open(%s) = %v, mau ErrPassphrase", tc.name, err)
+		}
+	}
+	// Salt di header yang dimodifikasi tidak boleh menghasilkan dekripsi
+	// sukses dengan passphrase apapun (key derived dari salt tamper ≠ key).
+}
+
+// TestAdversarialVaultLiveHandleHeaderIntegrity: handle vault yang hidup
+// WAJIB memverifikasi ulang header file (versi + salt) pada setiap operasi.
+// Tanpa itu, tamper byte versi/salt di disk tidak terdeteksi karena key sudah
+// ada di memori — bug yang ditemukan dan diperbaiki di loadEntries().
+func TestAdversarialVaultLiveHandleHeaderIntegrity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vault.enc")
+	v := openTestVault(t, path, "pass")
+	if err := v.Add("acct", "p", "rahasia", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	orig, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tamperAndCheck := func(name string, off int) {
+		t.Helper()
+		cp := append([]byte(nil), orig...)
+		cp[off] ^= 0x01
+		if err := os.WriteFile(path, cp, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := v.Get("acct"); err == nil {
+			t.Errorf("BYPASS: Get setelah tamper %s = nil — integritas header tidak diverifikasi", name)
+		}
+		if _, err := v.List(); err == nil {
+			t.Errorf("List setelah tamper %s = nil — harus gagal fail-closed", name)
+		}
+		if err := v.Add("acct2", "p", "s", time.Now().Add(time.Hour)); err == nil {
+			t.Errorf("Add setelah tamper %s = nil — harus gagal fail-closed", name)
+		}
+		// Pulihkan untuk kasus berikutnya.
+		if err := os.WriteFile(path, orig, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := v.Get("acct"); err != nil {
+			t.Fatalf("vault asli rusak setelah uji %s: %v", name, err)
+		}
+	}
+	tamperAndCheck("byte versi", len(vaultMagic))
+	tamperAndCheck("byte salt", headerSize-1)
+	tamperAndCheck("byte magic", 0)
+}
+
+// TestAdversarialVaultEmptyVaultIsExplicit: keputusan terdokumentasi — vault
+// sah dengan 0 entri (hasil createVault) valid, tapi akses entri tetap
+// ErrNotFound fail-closed; file JSON valid tanpa magic/encryption TIDAK pernah
+// dibaca sebagai vault kosong (magic + GCM auth wajib).
+func TestAdversarialVaultEmptyVaultIsExplicit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vault.enc")
+	v := openTestVault(t, path, "pass") // createVault: file valid 0 entri
+	if _, err := v.Get("apa-saja"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Get pada vault kosong = %v, mau ErrNotFound", err)
+	}
+	if err := v.Remove("apa-saja"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Remove pada vault kosong = %v, mau ErrNotFound", err)
+	}
+	infos, err := v.List()
+	if err != nil || len(infos) != 0 {
+		t.Errorf("List vault kosong = %v, %v; mau kosong tanpa error", infos, err)
+	}
+	// Vault kosong tidak boleh bisa "dibuka" oleh file JSON mentah.
+	p2 := filepath.Join(t.TempDir(), "vault.enc")
+	if err := os.WriteFile(p2, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(p2, "pass"); err == nil {
+		t.Error("BYPASS: file JSON kosong terbaca sebagai vault")
+	}
+}
+
+// TestAdversarialVaultClockBypassImpossible: Get tidak menerima parameter
+// waktu dan tidak ada jalur API yang mem-bypass cek kadaluarsa. Entry expired
+// tidak bisa dihidupkan kembali: reopen (derivasi key ulang) tetap menolak,
+// Add duplikat ditolak, dan remove+add dengan expiry masa lalu ditolak.
+func TestAdversarialVaultClockBypassImpossible(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vault.enc")
+	v := openTestVault(t, path, "pass")
+	if err := v.Add("soon", "p", "s", time.Now().Add(30*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(60 * time.Millisecond)
+	// Jalur langsung maupun lewat handle baru (derivasi ulang) sama-sama tolak.
+	for name, vv := range map[string]*Vault{"handle sama": v} {
+		if _, err := vv.Get("soon"); !errors.Is(err, ErrExpired) {
+			t.Errorf("Get (%s) = %v, mau ErrExpired", name, err)
+		}
+	}
+	v2 := openTestVault(t, path, "pass")
+	if _, err := v2.Get("soon"); !errors.Is(err, ErrExpired) {
+		t.Errorf("Get lewat vault baru = %v, mau ErrExpired (bypass clock)", err)
+	}
+	// Rotasi paksa: Add duplikat ditolak walau sudah expired.
+	if err := v.Add("soon", "p", "s2", time.Now().Add(time.Hour)); err == nil {
+		t.Error("Add duplikat (expired) harus ditolak — tidak ada jalur resurrect")
+	}
+	// Remove lalu Add dengan expiry masa lalu juga ditolak.
+	if err := v.Remove("soon"); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if err := v.Add("soon", "p", "s2", time.Now().Add(-time.Second)); err == nil {
+		t.Error("Add dengan expiry masa lalu harus ditolak")
+	}
+}
+
+// TestAdversarialVaultPBKDF2MinimumIterations: iterasi PBKDF2 rendah
+// (craft/konfigurasi lemah) ditolak keras oleh kdfKey — enforce minimum.
+func TestAdversarialVaultPBKDF2MinimumIterations(t *testing.T) {
+	salt := bytes.Repeat([]byte{0xAB}, saltSize)
+	for _, iter := range []int{1, 2, 4096, 99999, 0, -1} {
+		if _, err := kdfKey("pass", salt, iter); err == nil {
+			t.Errorf("kdfKey iterasi %d = nil, mau error (di bawah minimum %d)", iter, minKdfIterations)
+		}
+	}
+	if _, err := kdfKey("pass", salt, minKdfIterations); err != nil {
+		t.Errorf("kdfKey iterasi minimum %d = %v, mau ok", minKdfIterations, err)
+	}
+	if _, err := kdfKey("", salt, minKdfIterations); err == nil {
+		t.Error("kdfKey passphrase kosong harus error")
+	}
+	if _, err := kdfKey("pass", bytes.Repeat([]byte{1}, 7), minKdfIterations); err == nil {
+		t.Error("kdfKey salt < 8 byte harus error")
+	}
+	// Vault nyata tetap memakai kdfIterations >= minimum.
+	if kdfIterations < minKdfIterations {
+		t.Errorf("kdfIterations (%d) di bawah minimum (%d)", kdfIterations, minKdfIterations)
+	}
+}

@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"hermes-security-skills/internal/approval"
 	"hermes-security-skills/internal/capability"
+	"hermes-security-skills/internal/events"
 	"hermes-security-skills/internal/jobs"
 	"hermes-security-skills/internal/policy"
 	"hermes-security-skills/internal/risk"
@@ -31,18 +33,19 @@ const (
 // Config server MCP. Semua komponen policy injectable agar testable;
 // pada produksi cmd/hermes-security mengisi dari flag CLI.
 type Config struct {
-	Registry  *capability.Registry // allowlist tool (§4.3: Hermes hanya melihat tool dari registry)
-	Policy    *policy.Policy       // risk.yaml + limits.yaml (nil = load dari PolicyDir)
-	PolicyDir string               // direktori policy (dipakai bila Policy nil)
-	Scope     *scope.Checker       // scope rules in-line (nil = load dari ScopeFile)
-	ScopeFile string               // file scope rules YAML {allowed_hosts}
-	ProxyURL  string               // base URL control channel hermes-proxy
-	Store     *approval.Store      // approval store (nil = conditional/approval_required selalu ditolak — fail-closed)
-	JobsDir   string               // root jobs untuk cek abort marker (§10)
-	Version   string               // override versi server (default ServerVersion)
-	Now       func() time.Time     // injectable clock (reserved untuk test)
-	HTTP      *http.Client         // injectable client untuk test (default timeout 10s)
-	Audit     func(action string, detail map[string]any) error
+	Registry    *capability.Registry // allowlist tool (§4.3: Hermes hanya melihat tool dari registry)
+	Policy      *policy.Policy       // risk.yaml + limits.yaml (nil = load dari PolicyDir)
+	PolicyDir   string               // direktori policy (dipakai bila Policy nil)
+	Scope       *scope.Checker       // scope rules in-line (nil = load dari ScopeFile)
+	ScopeFile   string               // file scope rules YAML {allowed_hosts}
+	ProxyURL    string               // base URL control channel hermes-proxy
+	Store       *approval.Store      // approval store (nil = conditional/approval_required selalu ditolak — fail-closed)
+	JobsDir     string               // root jobs untuk cek abort marker (§10)
+	EvidenceDir string               // direktori evidence hermes-proxy — sumber event store read-only (§11/§25); kosong = tool event store menolak dengan pesan jelas
+	Version     string               // override versi server (default ServerVersion)
+	Now         func() time.Time     // injectable clock (reserved untuk test)
+	HTTP        *http.Client         // injectable client untuk test (default timeout 10s)
+	Audit       func(action string, detail map[string]any) error
 }
 
 // Server MCP minimal: initialize, notifications/initialized, tools/list,
@@ -192,12 +195,49 @@ type toolDef struct {
 // per capability terdaftar); capability lain memakai deskripsi generik
 // dari metadata registry.
 var capabilityDescriptions = map[string]string{
-	"inspect_request":     "Inspect a captured HTTP request (read-only, served from event store; no traffic to target).",
+	"inspect_request":     "Inspect a captured HTTP request/response by evidence_ref — served from the event store index over hermes-proxy evidence files; headers stay redacted; no traffic to the target (read-only).",
 	"request_replay":      "Replay an HTTP request to an in-scope target through hermes-proxy. Policy (scope + risk + approval) dieksekusi in-line sebelum provider dipanggil (ROADMAP 4.3).",
-	"response_comparison": "Compare two HTTP responses (read-only analysis).",
-	"list_history":        "List captured proxy traffic history (read-only, no network).",
-	"json_diff":           "Structural JSON diff (local provider, no network, no side effects).",
+	"response_comparison": "Compare two captured HTTP exchanges (evidence_ref_a vs evidence_ref_b) and return observations {status_diff|header_diff|body_diff} — event store index, no traffic to the target (read-only).",
+	"list_history":        "List captured proxy traffic history from the event store (index over evidence-*.json). Optional filters: limit, url_substring, method, status_min. Read-only, no network.",
+	"json_diff":           "Structural diff of two JSON values (json_a vs json_b) — local provider, no network, no side effects.",
 	"openapi_analysis":    "Analyze an OpenAPI specification via docker validator (network=none).",
+}
+
+// readOnlyInputSchemas: input schema tool read-only yang sudah dilayani
+// provider nyata (event store / lokal). Kunci = nama capability.
+var readOnlyInputSchemas = map[string]map[string]any{
+	"list_history": {
+		"type": "object",
+		"properties": map[string]any{
+			"limit":         map[string]any{"type": "integer", "minimum": 1, "description": "maksimum entri (entri terbaru yang dipertahankan; default semua)"},
+			"url_substring": map[string]any{"type": "string", "description": "filter: URL mengandung substring (case-insensitive)"},
+			"method":        map[string]any{"type": "string", "description": "filter: HTTP method exact (case-insensitive)"},
+			"status_min":    map[string]any{"type": "integer", "description": "filter: status >= nilai"},
+		},
+	},
+	"inspect_request": {
+		"type": "object",
+		"properties": map[string]any{
+			"evidence_ref": map[string]any{"type": "string", "description": "referensi evidence dari list_history (mis. evidence-000001.json)"},
+		},
+		"required": []string{"evidence_ref"},
+	},
+	"response_comparison": {
+		"type": "object",
+		"properties": map[string]any{
+			"evidence_ref_a": map[string]any{"type": "string", "description": "referensi evidence baseline"},
+			"evidence_ref_b": map[string]any{"type": "string", "description": "referensi evidence pembanding"},
+		},
+		"required": []string{"evidence_ref_a", "evidence_ref_b"},
+	},
+	"json_diff": {
+		"type": "object",
+		"properties": map[string]any{
+			"json_a": map[string]any{"description": "dokumen JSON pertama (nilai JSON apa pun)"},
+			"json_b": map[string]any{"description": "dokumen JSON kedua (nilai JSON apa pun)"},
+		},
+		"required": []string{"json_a", "json_b"},
+	},
 }
 
 func describeCapability(c capability.Capability) string {
@@ -208,11 +248,15 @@ func describeCapability(c capability.Capability) string {
 }
 
 // inputSchemaFor membangun JSON Schema sederhana per capability:
+//   - tool read-only dengan provider nyata: schema dari readOnlyInputSchemas;
 //   - requires_network: {url, method, headers?, body?, case?} — operasi
 //     aktif ke target via proxy;
 //   - requires_scope saja: {url, case?} — butuh target, tanpa eksekusi;
-//   - read-only murni: {}.
+//   - read-only lain (provider belum ada): {}.
 func inputSchemaFor(c capability.Capability) any {
+	if schema, ok := readOnlyInputSchemas[c.Name]; ok && !c.RequiresNetwork {
+		return schema
+	}
 	props := map[string]any{}
 	var required []string
 	if c.RequiresNetwork {
@@ -308,15 +352,13 @@ func (s *Server) toolsCall(params json.RawMessage) (any, *rpcError) {
 		}, true), nil
 	}
 
-	// Read-only (tanpa network): stub informatif — dilayani control plane
-	// tanpa menyentuh target (provider event store/docker menyusul).
+	// Read-only (tanpa network): dilayani control plane dari event store /
+	// provider lokal — TANPA traffic ke target (§11: capability read-only
+	// seperti list_history/inspect boleh dilayani tanpa menyentuh target).
+	// Tetap automatic tanpa approval, tetapi kill-switch abort (§10) tetap
+	// berlaku bila caller menyertakan 'case'.
 	if !capDef.RequiresNetwork {
-		s.auditDecision(p.Name, "stub", "read-only: tidak ada traffic ke target", nil)
-		return callResult("stub", map[string]any{
-			"capability": capDef.Name,
-			"provider":   capDef.DefaultProvider,
-			"note":       "read-only: hasil informatif; provider event-store/docker akan melayani capability ini di Phase 7/5 (ROADMAP 11/36)",
-		}, false), nil
+		return s.dispatchReadOnly(capDef, p)
 	}
 
 	// Operasi aktif (requires_network): wajib url + method.
@@ -447,6 +489,175 @@ func (s *Server) toolsCall(params json.RawMessage) (any, *rpcError) {
 		"provider":   capDef.DefaultProvider,
 		"proxy":      proxyResp,
 	}, false), nil
+}
+
+// ------------------------------------------------------- read-only dispatch
+
+// dispatchReadOnly melayani capability read-only dari provider lokal
+// (event store di atas evidence hermes-proxy — §11/§25 — atau diff JSON
+// lokal). Enforcement tetap in-line: capability critical sudah ditolak
+// di toolsCall; kill-switch abort (§10) tetap dievaluasi bila caller
+// menyertakan 'case'. Operasi read-only otomatis (tanpa approval, tanpa
+// scope check) karena tidak pernah mengirim traffic ke target.
+func (s *Server) dispatchReadOnly(capDef capability.Capability, p callParams) (any, *rpcError) {
+	// Kill switch (§10): case yang di-abort tidak melayani apa pun —
+	// termasuk operasi read-only terhadap datanya.
+	caseID, _ := p.Arguments["case"].(string)
+	caseID = strings.TrimSpace(caseID)
+	if caseID != "" && s.cfg.JobsDir != "" {
+		if !jobs.ValidID(caseID) {
+			reason := fmt.Sprintf("case id %q tidak valid (fail-closed)", caseID)
+			s.auditDecision(p.Name, "denied", reason, nil)
+			return callResult("denied", map[string]any{"reason": reason}, true), nil
+		}
+		if jobs.IsAborted(s.cfg.JobsDir, caseID) {
+			reason := fmt.Sprintf("case %q sudah di-abort (kill switch §10) — operasi read-only ditolak", caseID)
+			s.auditDecision(p.Name, "denied", reason, nil)
+			return callResult("denied", map[string]any{"reason": reason}, true), nil
+		}
+	}
+
+	switch capDef.Name {
+	case "list_history":
+		return s.callListHistory(p)
+	case "inspect_request":
+		return s.callInspectRequest(p)
+	case "response_comparison":
+		return s.callResponseComparison(p)
+	case "json_diff":
+		return s.callJSONDiff(p)
+	default:
+		// Capability read-only lain (mis. openapi_analysis — provider docker)
+		// belum punya provider lokal di control plane: stub informatif yang
+		// jujur, bukan hasil bohong (§4.2).
+		s.auditDecision(p.Name, "stub", "read-only: provider lokal belum tersedia", nil)
+		return callResult("stub", map[string]any{
+			"capability": capDef.Name,
+			"provider":   capDef.DefaultProvider,
+			"note":       "read-only: provider " + capDef.DefaultProvider + " belum tersedia di control plane (tool tidak mengeksekusi apa pun)",
+		}, false), nil
+	}
+}
+
+// eventStore memuat index event store dari --evidence-dir. Fail-closed:
+// evidence-dir tidak dikonfigurasi = error dengan pesan yang jelas.
+func (s *Server) eventStore() (*events.Store, *rpcError) {
+	if strings.TrimSpace(s.cfg.EvidenceDir) == "" {
+		return nil, errInvalidParams("evidence-dir tidak dikonfigurasi — jalankan serve dengan --evidence-dir (event store read-only, §11/§25)")
+	}
+	st, err := events.LoadEvidenceDir(s.cfg.EvidenceDir)
+	if err != nil {
+		return nil, errInternal("event store: " + err.Error())
+	}
+	return st, nil
+}
+
+// callListHistory: list_history → events.List dengan filter opsional
+// {limit, url_substring, method, status_min}.
+func (s *Server) callListHistory(p callParams) (any, *rpcError) {
+	st, rerr := s.eventStore()
+	if rerr != nil {
+		return nil, rerr
+	}
+	var f events.ListFilter
+	if v, ok := p.Arguments["limit"].(float64); ok && v >= 1 {
+		f.Limit = int(v)
+	} else if _, present := p.Arguments["limit"]; present {
+		return nil, errInvalidParams("argument 'limit' harus integer >= 1")
+	}
+	if v, ok := p.Arguments["url_substring"].(string); ok {
+		f.URLSubstring = v
+	}
+	if v, ok := p.Arguments["method"].(string); ok {
+		f.Method = v
+	}
+	if v, ok := p.Arguments["status_min"].(float64); ok {
+		f.StatusMin = int(v)
+	}
+	entries := st.List(f)
+	s.auditDecision(p.Name, "observed", "", nil)
+	return callResult("observed", map[string]any{
+		"provider":     "event-store",
+		"evidence_dir": filepath.ToSlash(s.cfg.EvidenceDir),
+		"count":        len(entries),
+		"entries":      entries,
+	}, false), nil
+}
+
+// callInspectRequest: inspect_request {evidence_ref} → events.Inspect —
+// detail penuh satu request/response; header tetap ter-redaksi seperti di
+// evidence file (proxy meredaksi sebelum menulis, §24/§25).
+func (s *Server) callInspectRequest(p callParams) (any, *rpcError) {
+	st, rerr := s.eventStore()
+	if rerr != nil {
+		return nil, rerr
+	}
+	ref, _ := p.Arguments["evidence_ref"].(string)
+	if strings.TrimSpace(ref) == "" {
+		return nil, errInvalidParams("argument 'evidence_ref' wajib string (mis. evidence-000001.json)")
+	}
+	detail, err := st.Inspect(ref)
+	if err != nil {
+		return nil, mapEventsErr(err)
+	}
+	s.auditDecision(p.Name, "observed", "", nil)
+	return callResult("observed", map[string]any{
+		"provider": "event-store",
+		"detail":   detail,
+	}, false), nil
+}
+
+// callResponseComparison: response_comparison {evidence_ref_a, evidence_ref_b}
+// → events.Compare — observations [{type, detail}] dengan struktur sama
+// dengan kontrak validator-http (§17).
+func (s *Server) callResponseComparison(p callParams) (any, *rpcError) {
+	st, rerr := s.eventStore()
+	if rerr != nil {
+		return nil, rerr
+	}
+	refA, _ := p.Arguments["evidence_ref_a"].(string)
+	refB, _ := p.Arguments["evidence_ref_b"].(string)
+	if strings.TrimSpace(refA) == "" || strings.TrimSpace(refB) == "" {
+		return nil, errInvalidParams("arguments 'evidence_ref_a' dan 'evidence_ref_b' wajib string (mis. evidence-000001.json)")
+	}
+	cmp, err := st.Compare(refA, refB)
+	if err != nil {
+		return nil, mapEventsErr(err)
+	}
+	s.auditDecision(p.Name, "observed", "", nil)
+	return callResult("observed", map[string]any{
+		"provider":       "event-store",
+		"evidence_ref_a": cmp.EvidenceRefA,
+		"evidence_ref_b": cmp.EvidenceRefB,
+		"status_a":       cmp.StatusA,
+		"status_b":       cmp.StatusB,
+		"observations":   cmp.Observations,
+	}, false), nil
+}
+
+// callJSONDiff: json_diff {json_a, json_b} → events.JSONDiff (provider
+// lokal, tanpa network, tanpa side effects).
+func (s *Server) callJSONDiff(p callParams) (any, *rpcError) {
+	ja, okA := p.Arguments["json_a"]
+	jb, okB := p.Arguments["json_b"]
+	if !okA || !okB {
+		return nil, errInvalidParams("arguments 'json_a' dan 'json_b' wajib ada (nilai JSON apa pun)")
+	}
+	obs := events.JSONDiff(ja, jb)
+	s.auditDecision(p.Name, "observed", "", nil)
+	return callResult("observed", map[string]any{
+		"provider":     "local",
+		"observations": obs,
+	}, false), nil
+}
+
+// mapEventsErr menerjemahkan error event store ke error JSON-RPC:
+// ref tidak dikenal / tidak valid = invalid params (-32602); sisanya internal.
+func mapEventsErr(err error) *rpcError {
+	if errors.Is(err, events.ErrNotFound) || errors.Is(err, events.ErrInvalidRef) {
+		return errInvalidParams(err.Error())
+	}
+	return errInternal(err.Error())
 }
 
 // checkApproval mencari scoped approval aktif untuk permintaan pada case.

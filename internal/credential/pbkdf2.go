@@ -60,12 +60,18 @@ func pbkdf2Key(password, salt []byte, iter, keyLen int, h func() hash.Hash) []by
 }
 
 // kdfKey adalah wrapper kdf untuk vault (HMAC-SHA256, 32 byte).
+// Fail-closed: passphrase kosong, salt pendek, dan iterasi di bawah
+// minKdfIterations SEMUA ditolak (iterasi rendah = brute force murah).
 func kdfKey(passphrase string, salt []byte, iterations int) ([]byte, error) {
 	if passphrase == "" {
 		return nil, fmt.Errorf("credential: passphrase kosong")
 	}
 	if len(salt) < 8 {
 		return nil, fmt.Errorf("credential: salt terlalu pendek")
+	}
+	if iterations < minKdfIterations {
+		return nil, fmt.Errorf("credential: iterasi PBKDF2 %d di bawah minimum %d — ditolak (fail-closed)",
+			iterations, minKdfIterations)
 	}
 	key := pbkdf2Key([]byte(passphrase), salt, iterations, 32, sha256.New)
 	if len(key) != 32 {

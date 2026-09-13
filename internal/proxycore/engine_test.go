@@ -1,12 +1,14 @@
 package proxycore
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -426,4 +428,126 @@ func TestMethodValidation(t *testing.T) {
 func (ef evidenceFile) RawContains(s string) bool {
 	data, _ := json.Marshal(ef)
 	return strings.Contains(string(data), s)
+}
+
+// TestAdversarialRedirectToIPObfuscatedBlocked: chain redirect multi-hop ke
+// target yang DISAMARKAN sebagai representasi numerik loopback/privat
+// (desimal penuh, hex, oktal, bentuk pendek, IPv6) harus berhenti sebagai
+// out_of_scope — scope check per-hop menolak SEBELUM dial (tidak ada server
+// yang perlu listen; buktinya: Redirect.Blocked, bukan error koneksi).
+func TestAdversarialRedirectToIPObfuscatedBlocked(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redir", func(w http.ResponseWriter, r *http.Request) {
+		target := r.URL.Query().Get("to")
+		http.Redirect(w, r, target, http.StatusFound)
+	})
+	ts, bundle := newLocalTarget(t, mux)
+	bundle.FollowRedirects = true
+	eng := mustEngine(t, bundle)
+
+	cases := []struct {
+		name   string
+		target string
+	}{
+		{"desimal penuh 127.0.0.1", "http://2130706433/"},
+		{"hex 127.0.0.1", "http://0x7f000001/"},
+		{"oktal 127.0.0.1", "http://017700000001/"},
+		{"bentuk pendek 127.1", "http://127.1/"},
+		{"IPv6 loopback", "http://[::1]/"},
+		{"IPv4-mapped IPv6", "http://[::ffff:127.0.0.1]/"},
+		{"metadata cloud", "http://169.254.169.254/latest/meta-data/"},
+		{"NAT64 -> loopback", "http://[64:ff9b::7f00:1]/"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, denial, err := eng.Execute(context.Background(), Request{
+				URL:    localURL(ts) + "/redir?to=" + url.QueryEscape(tc.target),
+				Method: "GET",
+			})
+			if err != nil || denial != nil {
+				t.Fatalf("Execute error=%v denial=%+v", err, denial)
+			}
+			if res.Response.Status != http.StatusFound {
+				t.Errorf("status = %d, mau 302 (hop terakhir in-scope)", res.Response.Status)
+			}
+			if !res.Redirect.Blocked || res.Redirect.Reason != "out_of_scope" {
+				t.Errorf("BYPASS: redirect ke %q = %+v, mau blocked/out_of_scope", tc.target, res.Redirect)
+			}
+			if res.Redirect.Followed {
+				t.Errorf("BYPASS: redirect ke %q diikuti", tc.target)
+			}
+		})
+	}
+}
+
+// TestAdversarialEngineRejectsInvalidHeaders: header instruksi dengan nama
+// bukan token RFC 7230 (spasi/tab/newline/colon) atau nilai ber-byte kontrol
+// ditolak 400 SEBELUM network/evidence (fail-closed, anti header smuggling).
+func TestAdversarialEngineRejectsInvalidHeaders(t *testing.T) {
+	ts, bundle := newLocalTarget(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "tidak boleh tercapai")
+	}))
+	eng := mustEngine(t, bundle)
+	cases := map[string]string{
+		"X Y":            "z",          // spasi di nama
+		"Authorization ": "spasi-ekor", // spasi sebelum colon
+		"X\tTab":         "v",
+		"X\nY":           "v",
+		"X:Colon":        "v",
+		"X-Ok":           "bad\r\nX-Injected: 1", // CRLF injection di nilai
+	}
+	for name, val := range cases {
+		_, denial, err := eng.Execute(context.Background(), Request{
+			URL: localURL(ts) + "/", Method: "GET", Headers: map[string]string{name: val}})
+		if err != nil {
+			t.Errorf("header %q: Execute error: %v", name, err)
+			continue
+		}
+		if denial == nil || denial.HTTP != http.StatusBadRequest {
+			t.Errorf("BYPASS: header %q = denial %+v, mau 400", name, denial)
+		}
+	}
+}
+
+// TestAdversarialEngineBinaryBodyEvidenceNoPanic: response binary dari target
+// (byte 0x00-0xFF, invalid UTF-8) mengalir utuh ke evidence base64 tanpa
+// panic; body penuh dan decode base64 identik dengan yang dikirim target.
+func TestAdversarialEngineBinaryBodyEvidenceNoPanic(t *testing.T) {
+	var binary []byte
+	for i := 0; i < 16; i++ {
+		for b := 0; b < 256; b++ {
+			binary = append(binary, byte(b))
+		}
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/bin", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write(binary)
+	})
+	ts, bundle := newLocalTarget(t, mux)
+	eng := mustEngine(t, bundle)
+
+	res, denial, err := eng.Execute(context.Background(), Request{URL: localURL(ts) + "/bin", Method: "GET"})
+	if err != nil || denial != nil {
+		t.Fatalf("Execute error=%v denial=%+v", err, denial)
+	}
+	if !bytes.Equal(res.FullBody, binary) {
+		t.Errorf("FullBody berubah: %d byte vs %d byte", len(res.FullBody), len(binary))
+	}
+	// Evidence memuat body binary base64 yang decode-balik identik.
+	data, err := os.ReadFile(filepath.Join(eng.EvidenceDir(), res.EvidenceRef))
+	if err != nil {
+		t.Fatalf("baca evidence: %v", err)
+	}
+	var ef evidenceFile
+	if err := json.Unmarshal(data, &ef); err != nil {
+		t.Fatalf("parse evidence binary: %v", err)
+	}
+	got, err := base64.StdEncoding.DecodeString(ef.Response.BodyBase64)
+	if err != nil {
+		t.Fatalf("decode evidence body: %v", err)
+	}
+	if !bytes.Equal(got, binary) {
+		t.Error("body binary di evidence tidak identik dengan response target")
+	}
 }

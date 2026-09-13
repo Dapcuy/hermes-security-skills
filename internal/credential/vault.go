@@ -1,6 +1,7 @@
 package credential
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -33,6 +34,14 @@ const (
 	kdfIterations = 210000 // PBKDF2-HMAC-SHA256 (OWASP 2022 minimum; vault lokal kecil)
 	headerSize    = len(vaultMagic) + 1 + saltSize
 )
+
+// minKdfIterations adalah batas bawah KERAS jumlah iterasi PBKDF2 yang boleh
+// dipakai mendekripsi/menulis vault. Format file saat ini TIDAK menyimpan
+// iteration count (hardcoded kdfIterations), jadi file craft tidak bisa
+// memaksa iterasi rendah — batas ini memastikan itu tetap benar bila format
+// nanti berkembang, dan menolak konfigurasi/param future yang lemah
+// (fail-closed, lihat TestAdversarialVaultPBKDF2MinimumIterations).
+const minKdfIterations = 100000
 
 // ErrExpired, ErrNotFound, ErrPassphrase: error yang wajib dibedakan caller
 // (fail-closed — jangan pernah menyamaratakan jadi satu).
@@ -208,7 +217,10 @@ func (v *Vault) persist(entries map[string]Entry) error {
 	return nil
 }
 
-// loadEntries membuka dan mendekripsi isi vault saat ini.
+// loadEntries membuka dan mendekripsi isi vault saat ini. Header file
+// diverifikasi penuh (magic + VERSI + salt) terhadap handle yang hidup:
+// tanpa ini, byte versi/salt di disk bisa di-tamper tanpa terdeteksi karena
+// key sudah ada di memori (integritas header = tamper-evident, §25).
 func (v *Vault) loadEntries() (map[string]Entry, error) {
 	data, err := os.ReadFile(v.path)
 	if err != nil {
@@ -216,6 +228,14 @@ func (v *Vault) loadEntries() (map[string]Entry, error) {
 	}
 	if len(data) < headerSize || string(data[:len(vaultMagic)]) != vaultMagic {
 		return nil, fmt.Errorf("%w: header vault tidak valid", ErrPassphrase)
+	}
+	if data[len(vaultMagic)] != vaultVersion {
+		return nil, fmt.Errorf("%w: versi vault %d tidak didukung", ErrPassphrase, data[len(vaultMagic)])
+	}
+	if !bytes.Equal(data[len(vaultMagic)+1:headerSize], v.salt) {
+		// Salt file berubah sejak Open — file bukan lagi vault yang sama
+		// (atau ditimpa vault lain). Jangan coba-dekripsi: fail-closed.
+		return nil, fmt.Errorf("%w: salt vault berubah — file bukan vault yang dibuka", ErrPassphrase)
 	}
 	return decryptEntries(v.key, data[headerSize:])
 }

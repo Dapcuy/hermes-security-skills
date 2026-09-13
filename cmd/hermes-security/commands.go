@@ -271,6 +271,10 @@ func cmdRoute(args []string) error {
 		return err
 	}
 	ranked := RouteSkills(*query, skills)
+	// Kejujuran output (§4.2 advisory): hasil ini datang dari stub sederhana,
+	// bukan router penuh. Jangan disajikan seolah routing semantik.
+	fmt.Println("route: STUB sederhana (match kata kunci query pada nama + deskripsi skill, tanpa semantik/konteks).")
+	fmt.Println("       Routing penuh = ROUTING.md — hasil di bawah hanya kandidat kasar untuk review user.")
 	if len(ranked) == 0 {
 		fmt.Println("route: tidak ada skill yang cocok")
 	} else {
@@ -526,6 +530,7 @@ func cmdDoctor(args []string) error {
 const (
 	defaultManifest          = "runtimes/proxy/manifests/image-manifest.yaml"
 	defaultJobsDir           = "jobs"
+	defaultEvidenceDir       = "jobs/evidence" // default sama dengan hermes-proxy --evidence-dir
 	defaultValidationTimeout = 60 * time.Second
 	supportedRuntime         = "docker"
 )

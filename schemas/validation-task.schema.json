@@ -31,7 +31,27 @@
     },
     "input": {
       "type": "object",
-      "description": "Input untuk validator: hasil replay/capture dari hermes-proxy, data user, atau referensi evidence. Validator network=none HANYA menganalisis data yang sudah ada — tidak ada fetch jaringan (ROADMAP 16, 17)."
+      "description": "Payload validator — SEMUA data input berada DI DALAM 'input' (kontrak ROADMAP 17: input adalah object berisi data untuk validator). Key yang valid bergantung validator.id: http-response-comparison → input.response_a + input.response_b; json-diff → input.json_a + input.json_b; openapi-analysis → input.spec. Data berasal dari hasil replay/capture hermes-proxy atau data user; validator network=none HANYA menganalisis data yang sudah ada — tidak ada fetch jaringan (ROADMAP 16, 17).",
+      "properties": {
+        "response_a": {
+          "$ref": "#/$defs/http_response",
+          "description": "Baseline (response A) untuk validator http-response-comparison — biasanya hasil replay pertama dari hermes-proxy."
+        },
+        "response_b": {
+          "$ref": "#/$defs/http_response",
+          "description": "Pembanding (response B) untuk validator http-response-comparison."
+        },
+        "json_a": {
+          "description": "Dokumen JSON pertama untuk validator json-diff (nilai JSON apa pun)."
+        },
+        "json_b": {
+          "description": "Dokumen JSON kedua untuk validator json-diff (nilai JSON apa pun)."
+        },
+        "spec": {
+          "type": "object",
+          "description": "Dokumen OpenAPI (JSON object) untuk validator openapi-analysis."
+        }
+      }
     },
     "result": {
       "type": "object",
@@ -124,6 +144,59 @@
         }
       },
       "description": "Opsional; budget dan stop conditions untuk task aktif. Diambil dari policy/limits.yaml dan execution plan, diturunkan ke validator/tool wrapper (ROADMAP 13.1, 22)."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "validator": { "properties": { "id": { "const": "http-response-comparison" } } } },
+        "required": ["validator"]
+      },
+      "then": {
+        "properties": { "input": { "required": ["response_a", "response_b"] } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "validator": { "properties": { "id": { "const": "json-diff" } } } },
+        "required": ["validator"]
+      },
+      "then": {
+        "properties": { "input": { "required": ["json_a", "json_b"] } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "validator": { "properties": { "id": { "const": "openapi-analysis" } } } },
+        "required": ["validator"]
+      },
+      "then": {
+        "properties": { "input": { "required": ["spec"] } }
+      }
+    }
+  ],
+  "$defs": {
+    "http_response": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "HTTP status code."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Header response (string -> string). Bila berasal dari hermes-proxy, header sensitif sudah ter-redaksi (ROADMAP 24, 25)."
+        },
+        "body": {
+          "type": "string",
+          "description": "Body response (teks). Body besar tetap disimpan sebagai evidence reference (hash + path), bukan inline tak terbatas (ROADMAP 24)."
+        }
+      },
+      "description": "Satu HTTP response terstruktur — payload validator-http-response-comparison di dalam input."
     }
   }
 }

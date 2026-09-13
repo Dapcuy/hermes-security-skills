@@ -11,20 +11,24 @@
 //	   eksekusi (max_requests / rate_limit_rps + grace); lewat deadline,
 //	   nuclei di-kill (stop condition "request budget habis", §10).
 //	3. Eksekusi nuclei sebagai subprocess dengan argumen TERBATAS —
-//	   target dari argumen posisional, -rate-limit dari bundle, -duc
+//	   target dari argumen posisional wrapper (diteruskan ke nuclei
+//	   sebagai -target; nuclei tidak menerima target posisional),
+//	   -t <path templates ter-bake>, -rate-limit dari bundle, -duc
 //	   (disable update check, lihat peringatan template di bawah),
-//	   -json, -o output file. Tidak ada pass-through argumen mentah;
+//	   -jsonl, -o output file. Tidak ada pass-through argumen mentah;
 //	   tidak ada shell (os/exec langsung → tidak bisa argumen injection).
 //	4. Parse output JSON minimal → tulis validation-result.json dengan
 //	   status "observed" + provenance (§13.1: tanpa langkah ini, output
 //	   tool jadi finding ilegal yang membypass finding lifecycle §26).
 //
 // PERINGATAN TEMPLATE PINNING (§13.1): nuclei templates adalah supply chain
-// vector. Wrapper TIDAK PERNAH mengunduh/meng-update template saat runtime
-// (flag -duc). Template di-pin per versi/commit, diverifikasi sebelum
-// dipakai, lalu di-mount read-only oleh control plane atau di-bake saat
-// build. Hasil "vulnerable" dari tool tetap observation — Hermes yang
-// menafsirkan (§17).
+// vector. Template DI-BAKE ke image saat build pada tag terpin
+// (ARG NUCLEI_TEMPLATES_TAG di Dockerfile) dan TIDAK PERNAH diunduh atau
+// di-update saat runtime (flag -duc). Wrapper MENOLAK jalan (exit 2) bila
+// direktori template (default /nuclei-templates) tidak ada atau tidak
+// memuat satu .yaml pun — bukti bahwa scan hanya berjalan dengan template
+// ter-bake, bukan hasil download runtime. Hasil "vulnerable" dari tool
+// tetap observation — Hermes yang menafsirkan (§17).
 //
 // Exit code:
 //
@@ -42,6 +46,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -63,6 +68,14 @@ const (
 	// envBundleSHA256 menyimpan hex SHA-256 yang diharapkan untuk file
 	// policy bundle (di-set oleh control plane saat menjalankan container).
 	envBundleSHA256 = "POLICY_BUNDLE_SHA256"
+
+	// defaultTemplatesDir adalah lokasi template ter-bake di image
+	// (di-COPY dari stage "templates" Dockerfile saat build, §13.1).
+	defaultTemplatesDir = "/nuclei-templates"
+
+	// templatesVersionFile berisi tag nuclei-templates terpin yang
+	// ditulis Dockerfile saat bake; dibaca wrapper untuk provenance.
+	templatesVersionFile = ".hermes-templates-version"
 
 	// Nama file output mentah nuclei, diletakkan bersebelahan dengan
 	// validation-result.json dan dirujuk sebagai evidence ref.
@@ -100,8 +113,9 @@ type validatorIdentity struct {
 }
 
 type provenance struct {
-	Tool        string `json:"tool"`
-	ToolVersion string `json:"tool_version"`
+	Tool             string `json:"tool"`
+	ToolVersion      string `json:"tool_version"`
+	TemplatesVersion string `json:"templates_version,omitempty"`
 }
 
 func failClosed(format string, args ...any) int {
@@ -212,6 +226,67 @@ func inScope(bundle *policyBundle, target string) error {
 	return fmt.Errorf("target %s (host %s port %s) di luar allowed_hosts bundle — scope check gagal (§8)", target, host, port)
 }
 
+// verifyTemplates memastikan template ter-bake benar-benar tersedia sebelum
+// nuclei dieksekusi (§13.1). Fail-closed: path tidak ada, bukan direktori/
+// file .yaml, atau direktori tidak memuat satu .yaml/.yml pun = REJECT —
+// scan tanpa template ter-bake dilarang karena itu tanda nuclei akan mencoba
+// mengunduh template saat runtime. Path boleh direktori ATAU satu file
+// template .yaml/.yml (semantik flag -t nuclei). Mengembalikan versi
+// template terpin untuk provenance (cari templatesVersionFile di path/dir
+// dan maksimal 6 level di atasnya; "unknown" bila tidak ketemu).
+func verifyTemplates(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("template ter-bake tidak ada di %s — image tanpa template / mount salah, tolak jalan (§13.1): %w", path, err)
+	}
+	found := false
+	if info.IsDir() {
+		walkErr := filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			name := d.Name()
+			if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+				found = true
+				return fs.SkipAll // cukup satu template untuk membuktikan bake
+			}
+			return nil
+		})
+		if walkErr != nil {
+			return "", fmt.Errorf("direktori template tidak bisa dibaca: %s — %w", path, walkErr)
+		}
+		if !found {
+			return "", fmt.Errorf("direktori template kosong (tidak ada .yaml): %s — scan tanpa template ter-bake dilarang (§13.1)", path)
+		}
+	} else {
+		name := filepath.Base(path)
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			return "", fmt.Errorf("path template bukan direktori maupun file .yaml: %s — tolak jalan (§13.1)", path)
+		}
+		found = true
+	}
+	version := ""
+	lookup := path
+	if !info.IsDir() {
+		lookup = filepath.Dir(path)
+	}
+	for i := 0; i < 6 && version == ""; i++ {
+		if data, readErr := os.ReadFile(filepath.Join(lookup, templatesVersionFile)); readErr == nil {
+			version = strings.TrimSpace(string(data))
+		} else {
+			lookup = filepath.Dir(lookup)
+		}
+	}
+	if version == "" {
+		fmt.Fprintf(os.Stderr, "tool-nuclei wrapper: peringatan: file versi template tidak terbaca, provenance templates_version=unknown\n")
+		version = "unknown"
+	}
+	return version, nil
+}
+
 // loadTaskID membaca validation-task.json dan mengambil task_id (§17).
 func loadTaskID(path string) (string, error) {
 	data, err := os.ReadFile(path)
@@ -273,6 +348,7 @@ func run() int {
 	taskPath := flag.String("input", "/workspace/input/validation-task.json", "path validation-task.json")
 	outPath := flag.String("output", "/workspace/output/validation-result.json", "path validation-result.json")
 	nucleiBin := flag.String("nuclei", "/usr/bin/nuclei", "path binary nuclei")
+	templatesDir := flag.String("templates", defaultTemplatesDir, "path direktori atau file .yaml templates ter-bake (wajib ada, §13.1)")
 	flag.Parse()
 
 	// Target WAJIB satu argumen posisional — argumen lain tidak diteruskan.
@@ -294,6 +370,15 @@ func run() int {
 		return failClosed("%v", err)
 	}
 
+	// 1c. Template ter-bake wajib ada & berisi .yaml — fail-closed sebelum
+	// nuclei dieksekusi (§13.1: scan hanya boleh jalan dengan template
+	// ter-bake saat build, bukan hasil download runtime).
+	templatesVersion, err := verifyTemplates(*templatesDir)
+	if err != nil {
+		return failClosed("%v", err)
+	}
+	fmt.Fprintf(os.Stderr, "tool-nuclei wrapper: templates ter-bake di %s (versi %s)\n", *templatesDir, templatesVersion)
+
 	// Task ID untuk provenance result.
 	taskID, err := loadTaskID(*taskPath)
 	if err != nil {
@@ -309,12 +394,16 @@ func run() int {
 	defer cancel()
 
 	// 3. Eksekusi nuclei dengan argumen TERBATAS (whitelist, bukan passthrough).
+	// SEMUA flag WAJIB mendahului target: nuclei (goflags) berhenti mem-parse
+	// pada argumen non-flag pertama dan membuang sisanya (target tidak
+	// diterima sebagai posisional, hanya via flag -target).
 	rawOutPath := filepath.Join(filepath.Dir(*outPath), rawOutputName)
 	cmdArgs := []string{
-		target,
+		"-target", target,
+		"-t", *templatesDir, // template ter-bake — tidak ada download runtime (§13.1)
 		"-rate-limit", fmt.Sprintf("%d", bundle.RateLimitRPS),
 		"-duc", // disable update check — template tidak pernah di-update saat runtime (§13.1)
-		"-json",
+		"-jsonl", // output JSONL (flag -json dihapus sejak nuclei v3.3)
 		"-o", rawOutPath,
 	}
 	cmd := exec.CommandContext(ctx, *nucleiBin, cmdArgs...)
@@ -354,7 +443,11 @@ func run() int {
 		Validator:    validatorIdentity{ID: validatorID, Version: validatorVersion},
 		Status:       "observed", // tool tidak pernah menyatakan "vulnerable confirmed" (§17)
 		EvidenceRefs: evidenceRefs,
-		Provenance:   provenance{Tool: toolName, ToolVersion: toolVersion},
+		Provenance: provenance{
+			Tool:             toolName,
+			ToolVersion:      toolVersion,
+			TemplatesVersion: templatesVersion, // versi template ter-bake (§13.1)
+		},
 	}
 	if err := writeResult(*outPath, res); err != nil {
 		return failClosed("gagal menulis validation-result.json: %v", err)

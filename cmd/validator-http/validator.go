@@ -10,9 +10,15 @@ import (
 	"strings"
 )
 
-// Task input (validation-task.json).
+// Task input (validation-task.json). Semua payload validator berada DI DALAM
+// 'input' (kontrak §17: input adalah object berisi data validator).
 type Task struct {
-	TaskID    string    `json:"task_id"`
+	TaskID string `json:"task_id"`
+	Input  *Input `json:"input"`
+}
+
+// Input payload validator-http: dua response yang dibandingkan.
+type Input struct {
 	ResponseA *Response `json:"response_a"`
 	ResponseB *Response `json:"response_b"`
 }
@@ -74,19 +80,20 @@ func Execute(task *Task) (*Output, error) {
 	if task == nil {
 		return nil, errors.New("validator-http: task nil")
 	}
-	if task.ResponseA == nil || task.ResponseB == nil {
-		return nil, errors.New("validator-http: response_a dan response_b wajib ada")
+	// Kontrak §17: payload validator berada DI DALAM 'input'.
+	if task.Input == nil || task.Input.ResponseA == nil || task.Input.ResponseB == nil {
+		return nil, errors.New("validator-http: input.response_a dan input.response_b wajib ada (kontrak §17)")
 	}
-	if task.ResponseA.Status < 100 || task.ResponseA.Status > 599 {
-		return nil, fmt.Errorf("validator-http: response_a.status tidak valid: %d", task.ResponseA.Status)
+	if task.Input.ResponseA.Status < 100 || task.Input.ResponseA.Status > 599 {
+		return nil, fmt.Errorf("validator-http: input.response_a.status tidak valid: %d", task.Input.ResponseA.Status)
 	}
-	if task.ResponseB.Status < 100 || task.ResponseB.Status > 599 {
-		return nil, fmt.Errorf("validator-http: response_b.status tidak valid: %d", task.ResponseB.Status)
+	if task.Input.ResponseB.Status < 100 || task.Input.ResponseB.Status > 599 {
+		return nil, fmt.Errorf("validator-http: input.response_b.status tidak valid: %d", task.Input.ResponseB.Status)
 	}
 	out := &Output{
 		TaskID:       task.TaskID,
 		Validator:    ValidatorInfo{ID: "http-response-comparison", Version: "0.1.0"},
-		Observations: Compare(*task.ResponseA, *task.ResponseB),
+		Observations: Compare(*task.Input.ResponseA, *task.Input.ResponseB),
 		Evidence:     []any{},
 	}
 	out.Result.Status = "observed"

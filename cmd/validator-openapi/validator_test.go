@@ -20,7 +20,7 @@ const fullSpec = `{
 
 func specTask(t *testing.T, spec string) *Task {
 	t.Helper()
-	return &Task{TaskID: "oa-1", Spec: json.RawMessage(spec)}
+	return &Task{TaskID: "oa-1", Input: &Input{Spec: json.RawMessage(spec)}}
 }
 
 func TestAnalyzeFullSpec(t *testing.T) {
@@ -86,9 +86,9 @@ func TestExecuteFailClosed(t *testing.T) {
 		t.Error("task nil harus error")
 	}
 	if _, err := Execute(&Task{TaskID: "x"}); err == nil {
-		t.Error("tanpa spec harus error")
+		t.Error("tanpa input harus error")
 	}
-	bad := Task{TaskID: "x", Spec: json.RawMessage("[1,2,3]")}
+	bad := Task{TaskID: "x", Input: &Input{Spec: json.RawMessage("[1,2,3]")}}
 	if _, err := Execute(&bad); err == nil {
 		t.Error("spec array harus ditolak (harus object)")
 	}
@@ -117,7 +117,7 @@ func TestRunEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "task.json")
 	out := filepath.Join(dir, "nested", "result.json")
-	content := `{"task_id":"oa-1","spec":{"info":{"title":"T","version":"1"},"paths":{"/a":{}}}}`
+	content := `{"task_id":"oa-1","input":{"spec":{"info":{"title":"T","version":"1"},"paths":{"/a":{}}}}}`
 	if err := os.WriteFile(in, []byte(content), 0o600); err != nil {
 		t.Fatalf("tulis input: %v", err)
 	}

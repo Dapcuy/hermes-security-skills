@@ -80,9 +80,12 @@ func TestExecuteFailClosed(t *testing.T) {
 		t.Error("task nil harus error")
 	}
 	if _, err := Execute(&Task{TaskID: "t"}); err == nil {
-		t.Error("tanpa response_a/response_b harus error")
+		t.Error("tanpa input harus error")
 	}
-	bad := Task{TaskID: "t", ResponseA: &Response{Status: 42}, ResponseB: &Response{Status: 200}}
+	if _, err := Execute(&Task{TaskID: "t", Input: &Input{}}); err == nil {
+		t.Error("tanpa input.response_a/input.response_b harus error (kontrak 17)")
+	}
+	bad := Task{TaskID: "t", Input: &Input{ResponseA: &Response{Status: 42}, ResponseB: &Response{Status: 200}}}
 	if _, err := Execute(&bad); err == nil {
 		t.Error("status di luar 100-599 harus error")
 	}
@@ -90,9 +93,11 @@ func TestExecuteFailClosed(t *testing.T) {
 
 func TestExecuteOutputShape(t *testing.T) {
 	task := Task{
-		TaskID:    "val-001",
-		ResponseA: &Response{Status: 200, Body: "a"},
-		ResponseB: &Response{Status: 200, Body: "b"},
+		TaskID: "val-001",
+		Input: &Input{
+			ResponseA: &Response{Status: 200, Body: "a"},
+			ResponseB: &Response{Status: 200, Body: "b"},
+		},
 	}
 	out, err := Execute(&task)
 	if err != nil {
@@ -117,9 +122,11 @@ func TestRunEndToEnd(t *testing.T) {
 	in := filepath.Join(dir, "validation-task.json")
 	out := filepath.Join(dir, "nested", "validation-result.json")
 	task := map[string]any{
-		"task_id":    "val-001",
-		"response_a": map[string]any{"status": 200, "headers": map[string]string{"Server": "a"}, "body": "same"},
-		"response_b": map[string]any{"status": 200, "headers": map[string]string{"Server": "b"}, "body": "same"},
+		"task_id": "val-001",
+		"input": map[string]any{
+			"response_a": map[string]any{"status": 200, "headers": map[string]string{"Server": "a"}, "body": "same"},
+			"response_b": map[string]any{"status": 200, "headers": map[string]string{"Server": "b"}, "body": "same"},
+		},
 	}
 	data, err := json.Marshal(task)
 	if err != nil {

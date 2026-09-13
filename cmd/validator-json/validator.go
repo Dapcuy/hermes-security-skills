@@ -10,11 +10,17 @@ import (
 	"sort"
 )
 
-// Task input: json_a dan json_b adalah dua dokumen JSON apa pun.
+// Task input: input.json_a dan input.json_b adalah dua dokumen JSON apa pun
+// (kontrak §17: payload validator berada DI DALAM 'input').
 type Task struct {
-	TaskID string          `json:"task_id"`
-	JsonA  json.RawMessage `json:"json_a"`
-	JsonB  json.RawMessage `json:"json_b"`
+	TaskID string `json:"task_id"`
+	Input  *Input `json:"input"`
+}
+
+// Input payload validator-json.
+type Input struct {
+	JsonA json.RawMessage `json:"json_a"`
+	JsonB json.RawMessage `json:"json_b"`
 }
 
 type ValidatorInfo struct {
@@ -65,15 +71,16 @@ func Execute(task *Task) (*Output, error) {
 	if task == nil {
 		return nil, errors.New("validator-json: task nil")
 	}
-	if len(task.JsonA) == 0 || len(task.JsonB) == 0 {
-		return nil, errors.New("validator-json: json_a dan json_b wajib ada")
+	// Kontrak §17: payload validator berada DI DALAM 'input'.
+	if task.Input == nil || len(task.Input.JsonA) == 0 || len(task.Input.JsonB) == 0 {
+		return nil, errors.New("validator-json: input.json_a dan input.json_b wajib ada (kontrak §17)")
 	}
 	var a, b any
-	if err := json.Unmarshal(task.JsonA, &a); err != nil {
-		return nil, fmt.Errorf("validator-json: json_a tidak valid: %w", err)
+	if err := json.Unmarshal(task.Input.JsonA, &a); err != nil {
+		return nil, fmt.Errorf("validator-json: input.json_a tidak valid: %w", err)
 	}
-	if err := json.Unmarshal(task.JsonB, &b); err != nil {
-		return nil, fmt.Errorf("validator-json: json_b tidak valid: %w", err)
+	if err := json.Unmarshal(task.Input.JsonB, &b); err != nil {
+		return nil, fmt.Errorf("validator-json: input.json_b tidak valid: %w", err)
 	}
 	out := &Output{
 		TaskID:       task.TaskID,

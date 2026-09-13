@@ -9,10 +9,16 @@ import (
 	"strings"
 )
 
-// Task input: field 'spec' berisi dokumen OpenAPI (JSON).
+// Task input: input.spec berisi dokumen OpenAPI (JSON) — kontrak §17:
+// payload validator berada DI DALAM 'input'.
 type Task struct {
-	TaskID string          `json:"task_id"`
-	Spec   json.RawMessage `json:"spec"`
+	TaskID string `json:"task_id"`
+	Input  *Input `json:"input"`
+}
+
+// Input payload validator-openapi.
+type Input struct {
+	Spec json.RawMessage `json:"spec"`
 }
 
 type ValidatorInfo struct {
@@ -71,12 +77,13 @@ func Execute(task *Task) (*Output, error) {
 	if task == nil {
 		return nil, errors.New("validator-openapi: task nil")
 	}
-	if len(task.Spec) == 0 {
-		return nil, errors.New("validator-openapi: field 'spec' wajib ada")
+	// Kontrak §17: payload validator berada DI DALAM 'input'.
+	if task.Input == nil || len(task.Input.Spec) == 0 {
+		return nil, errors.New("validator-openapi: field 'input.spec' wajib ada (kontrak §17)")
 	}
 	var spec map[string]any
-	if err := json.Unmarshal(task.Spec, &spec); err != nil {
-		return nil, fmt.Errorf("validator-openapi: spec bukan JSON object: %w", err)
+	if err := json.Unmarshal(task.Input.Spec, &spec); err != nil {
+		return nil, fmt.Errorf("validator-openapi: input.spec bukan JSON object: %w", err)
 	}
 	summary, obs := Analyze(spec)
 	out := &Output{

@@ -78,7 +78,8 @@ Commands:
                      --url <url> --scope-file <file.yaml>
   check-policy       klasifikasi risk + evaluasi policy action
                      --capability <nama> --method <http-method>
-  route              routing stub query -> skill (--query <teks>)
+  route              routing STUB query -> skill (match kata kunci;
+                     routing penuh = ROUTING.md) --query <teks>
   doctor             cek kesehatan project (registry, policy, skills)
   validate           jalankan validator di container Docker ephemeral
                      (Phase 5, ROADMAP 36) — network=none, baseline §15
@@ -108,8 +109,10 @@ Commands:
                      benchmark run --scenarios benchmarks/scenarios.json
                      [--proxy-url URL] [--scope-file f] [--out file]
   serve              MCP server mode (ROADMAP 4.3, 35) — JSON-RPC 2.0 over
-                     stdio, enforcement in-line (scope + risk + approval)
+                     stdio, enforcement in-line (scope + risk + approval);
+                     tool read-only dilayani event store dari evidence dir
                      --mcp (wajib) [--proxy-url URL] [--scope-file file]
+                     [--evidence-dir dir]
 
 Common flags:
   --audit-file <path>   file audit JSONL (default audit/audit.jsonl)

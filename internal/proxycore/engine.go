@@ -220,6 +220,22 @@ func (e *Engine) Execute(ctx context.Context, req Request) (Result, *Denial, err
 		return Result{}, &Denial{HTTP: http.StatusBadRequest, Reason: "url tidak valid"}, nil
 	}
 
+	// Validasi nama/nilai header instruksi (fail-closed, sebelum network dan
+	// evidence): nama dengan spasi/tab/newline/colon atau nilai dengan byte
+	// kontrol = vektor header smuggling — Go http client akan menolaknya saat
+	// dial, jadi tolak eksplisit di sini sebagai denial bersih (400), bukan
+	// error setelah budget/rate-limit terpakai.
+	for name, val := range req.Headers {
+		if !validHeaderFieldName(name) {
+			return Result{}, &Denial{HTTP: http.StatusBadRequest,
+				Reason: fmt.Sprintf("header name tidak valid (bukan RFC 7230 token): %q", name)}, nil
+		}
+		if !validHeaderFieldValue(val) {
+			return Result{}, &Denial{HTTP: http.StatusBadRequest,
+				Reason: fmt.Sprintf("header value tidak valid (byte kontrol): %q", name)}, nil
+		}
+	}
+
 	cur := hop{method: method, url: u, headers: sanitizeHeaders(req.Headers), body: []byte(req.Body)}
 
 	var (

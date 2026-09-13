@@ -51,7 +51,7 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 ## Core Concepts
 
 - **core/** (Tier 1): fondasi setiap engagement — scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting.
-- **recon/** (Tier 2, placeholder): pemetaan permukaan pasif — recon, surface mapping, endpoint discovery, fingerprinting, dan prioritisasi permukaan.
+- **recon/** (Tier 2): pemetaan permukaan tanpa menyentuh target — recon pasif dari sumber publik, ekstraksi endpoint dari data terekam, fingerprint teknologi, dan prioritisasi permukaan; `web-surface-mapping` yang satu tier dengannya berada di `web/`.
 - **http/** (Tier 3, placeholder): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, auth flow, capture browser.
 - **web/** (Tier 4): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, injection, SSRF, CSRF, upload, misconfiguration, dan validasi payload.
 - **api/** (Tier 5, placeholder): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token, rate limit, dan webhook.
@@ -62,7 +62,7 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 ## Reasoning Workflow
 
 1. Tentukan konteks: engagement baru, target web/API, kode sumber, atau domain khusus.
-2. Petakan konteks ke kategori: fondasi → core; permukaan web → web; API → api; operasi HTTP → http; kode tersedia → source; domain khusus → specialized.
+2. Petakan konteks ke kategori: fondasi → core; pemetaan permukaan awal → recon; permukaan web → web; API → api; operasi HTTP → http; kode tersedia → source; domain khusus → specialized.
 3. Buka SKILL.md pada kategori terpilih; pastikan prasyaratnya (authorization, context, capability) terpenuhi.
 4. Bila gejala masih ambigu, lanjutkan ke ROUTING.md untuk pemetaan per-gejala.
 5. Selalu mulai dari engagement-scoping untuk engagement baru — tanpa kecuali.
@@ -115,7 +115,7 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 | Kategori | Tier | Isi | Jumlah skill |
 |---|---|---|---|
 | `core/` | 1 | Fondasi setiap engagement: scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting. | 7 |
-| `recon/` | 2 | (Placeholder) pemetaan permukaan pasif: recon, surface mapping, endpoint discovery, fingerprinting, prioritisasi. | 0 |
+| `recon/` | 2 | Pemetaan permukaan tanpa menyentuh target: recon pasif dari sumber publik, ekstraksi endpoint dari data terekam, fingerprint teknologi, prioritisasi permukaan. | 4 |
 | `http/` | 3 | (Placeholder) metodologi operasi HTTP melalui capability proxy: traffic analysis, replay, mutation, comparison. | 4 |
 | `web/` | 4 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, injection, SSRF, CSRF, misconfiguration, validasi payload. | 10 |
 | `api/` | 5 | (Placeholder) metodologi keamanan API: methodology, OpenAPI, REST, GraphQL, token, rate limit, webhook. | 2 |
@@ -123,7 +123,7 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 | `source/` | 7 | Review source code yang sepenuhnya pasif: triage codebase, review authorization, data flow server-side, deteksi secret, risiko dependensi. | 5 |
 | `specialized/` | 8 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: keamanan integrasi LLM, keamanan MCP, responsible disclosure. | 3 |
 
-**Total: 39 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui; lihat False Positive Checks).
+**Total: 43 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui; lihat False Positive Checks).
 
 ## Related Skills
 

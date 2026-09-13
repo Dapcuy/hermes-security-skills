@@ -30,13 +30,14 @@ func cmdServe(args []string) error {
 	scopeFile := fs.String("scope-file", "", "scope rules YAML {allowed_hosts} untuk scope check in-line")
 	storePath := fs.String("state-dir", defaultJobsDir, "direktori state approval store (approvals.json)")
 	jobsDirFlag := fs.String("jobs-dir", defaultJobsDir, "root jobs untuk cek abort marker (§10)")
+	evidenceDir := fs.String("evidence-dir", defaultEvidenceDir, "direktori evidence hermes-proxy (index event store read-only untuk list_history/inspect_request/response_comparison, §11/§25)")
 	auditFile := auditFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if !*mcpMode {
 		fmt.Fprintln(os.Stderr, "serve: flag --mcp wajib — satu-satunya mode server yang didukung (ROADMAP 4.3).")
-		fmt.Fprintln(os.Stderr, "  usage: hermes-security serve --mcp [--proxy-url URL] [--scope-file file] [--registry file] [--policy-dir dir] [--state-dir dir] [--jobs-dir dir] [--audit-file file]")
+		fmt.Fprintln(os.Stderr, "  usage: hermes-security serve --mcp [--proxy-url URL] [--scope-file file] [--registry file] [--policy-dir dir] [--state-dir dir] [--jobs-dir dir] [--evidence-dir dir] [--audit-file file]")
 		return fmt.Errorf("serve: tanpa --mcp tidak ada server yang dijalankan")
 	}
 
@@ -48,13 +49,14 @@ func cmdServe(args []string) error {
 	}
 	store := approval.OpenStore(filepath.Join(*storePath, "approvals.json"))
 	srv, err := mcp.NewServer(mcp.Config{
-		Registry:  reg,
-		PolicyDir: *policyDirFlag,
-		ScopeFile: *scopeFile,
-		ProxyURL:  *proxyURL,
-		Store:     store,
-		JobsDir:   *jobsDirFlag,
-		Audit:     func(action string, detail map[string]any) error { return writeAudit(*auditFile, action, detail) },
+		Registry:    reg,
+		PolicyDir:   *policyDirFlag,
+		ScopeFile:   *scopeFile,
+		ProxyURL:    *proxyURL,
+		Store:       store,
+		JobsDir:     *jobsDirFlag,
+		EvidenceDir: *evidenceDir,
+		Audit:       func(action string, detail map[string]any) error { return writeAudit(*auditFile, action, detail) },
 	})
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
@@ -63,11 +65,12 @@ func cmdServe(args []string) error {
 	// Audit entry start (§35: audit log; keputusan tools/call ter-audit
 	// per call melalui mcp.Config.Audit).
 	if err := writeAudit(*auditFile, "serve_started", map[string]any{
-		"mode":        "mcp",
-		"proxy_url":   *proxyURL,
-		"registry":    *registryPath,
-		"scope_file":  *scopeFile,
-		"state_dir":   *storePath,
+		"mode":              "mcp",
+		"proxy_url":         *proxyURL,
+		"registry":          *registryPath,
+		"scope_file":        *scopeFile,
+		"state_dir":         *storePath,
+		"evidence_dir":      *evidenceDir,
 		"tools_allowlisted": reg.Count(),
 	}); err != nil {
 		return err
@@ -75,6 +78,7 @@ func cmdServe(args []string) error {
 	fmt.Fprintf(os.Stderr, "serve: MCP server aktif di stdio (protocol %s) — %d tool dari registry %s\n",
 		mcp.ProtocolVersion, reg.Count(), *registryPath)
 	fmt.Fprintf(os.Stderr, "serve: proxy control channel: %s; approval store: %s\n", *proxyURL, store.Path())
+	fmt.Fprintf(os.Stderr, "serve: event store (read-only): %s\n", *evidenceDir)
 	fmt.Fprintln(os.Stderr, "serve: menunggu request JSON-RPC di stdin (EOF untuk keluar)...")
 
 	// Jalankan sampai stdin EOF. stdout HANYA berisi response JSON-RPC.

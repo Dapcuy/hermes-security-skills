@@ -1,7 +1,8 @@
 // Command validator-http: membandingkan dua HTTP response (ROADMAP 17 —
-// Docker Execution Contract). Input validation-task.json berisi response_a
-// dan response_b {status, headers{}, body}; output validation-result.json
-// berisi status "observed" + observations {status_diff|header_diff|body_diff}.
+// Docker Execution Contract). Input validation-task.json berisi input
+// {response_a, response_b} dengan tiap response {status, headers{}, body};
+// output validation-result.json berisi status "observed" + observations
+// {status_diff|header_diff|body_diff}.
 //
 // Validator hanya menghasilkan observation — bukan keputusan vulnerability
 // (ROADMAP 17: Validator = observation, Hermes = interpretation).

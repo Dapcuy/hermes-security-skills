@@ -25,10 +25,16 @@ Aturan pemakaian:
 | Gejala / Konteks | Skill utama | Bersama |
 |---|---|---|
 | Perlu pemetaan awal target tanpa menyentuh target secara aktif | `passive-recon` | `engagement-scoping` |
+| History masih kosong, perlu bahan aset dari sumber publik (CT logs, DNS, dork, arsip) | `passive-recon` | `web-surface-mapping` |
 | Perlu memetakan permukaan web (routes, parameter, fitur) | `web-surface-mapping` | `endpoint-discovery` |
 | Perlu daftar endpoint tersembunyi / tidak terdokumentasi | `endpoint-discovery` | `web-surface-mapping` |
+| Sudah ada traffic terekam (termasuk robots/sitemap ter-capture), perlu daftar endpoint dari data yang ada | `endpoint-discovery` | `web-surface-mapping` |
 | Perlu tahu teknologi dan stack target | `technology-fingerprinting` | `passive-recon` |
+| Header dan pola respons terekam, perlu identifikasi server/framework dari data yang sudah ada | `technology-fingerprinting` | `false-positive-analysis` |
 | Banyak permukaan, perlu prioritas mana diuji duluan | `attack-surface-prioritization` | `security-task-routing` |
+| Inventaris sudah lengkap, perlu peta prioritas (auth, admin, upload, API versi lama) untuk hypothesis | `attack-surface-prioritization` | `hypothesis-management` |
+
+Catatan: seluruh rute Tier 2 bersifat pasif — nol request ke target; skill ini aman dijalankan walau authorization masih `pending`. Kebutuhan verifikasi aktif atas hasilnya dirutekan ke skill eksekusi (Tier 3 ke atas) dengan approval tersendiri.
 
 ## 3. HTTP Proxy (Tier 3)
 

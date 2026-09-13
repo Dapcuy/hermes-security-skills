@@ -95,6 +95,16 @@ func (r Record) activeAt(now time.Time) bool {
 // Store approval berbasis file JSON. Aman dipakai ulang; I/O dilakukan
 // per operasi sehingga lintas proses (CLI abort vs MCP server) selalu
 // membaca state terbaru.
+//
+// Garisi konsistensi:
+//   - dalam SATU proses: s.mu membuat read-modify-write atomik — N goroutine
+//     Consume pada budget M berhasil TEPAT M (diuji adversarial);
+//   - lintas proses: tulisan atomik (temp+rename) mencegah file setengah
+//     tertulis, tetapi TIDAK ada file-lock — dua proses yang read-modify-
+//     write bersamaan bisa saling menimpa (lost update). Limitasi yang
+//     diterima: jendela race milidetik, dan kombinasi proses yang paling
+//     kritis (abort vs consume) arahnya konservatif — revoke selalu
+//     menang karena dibaca ulang pada setiap FindActive/Consume berikutnya.
 type Store struct {
 	mu   sync.Mutex
 	path string
@@ -278,6 +288,18 @@ func (s *Store) Consume(id string) error {
 }
 
 // readLocked membaca + parse file store. Pemanggil wajib memegang s.mu.
+//
+// Fail-closed (adversarial hardening §9/§25): selain JSON korup, store yang
+// LOLOS parse tetap ditolak bila mengandung tanda tampering:
+//   - id duplikat (Save selalu menolak duplikat — keberadaannya berarti file
+//     diedit di luar API; dedup deterministik justru memberi attacker kendali
+//     atas record mana yang "menang", jadi dipilih error total);
+//   - record yang gagal validateRecord (field wajib kosong);
+//   - Used di luar rentang 0..MaxRequests (used negatif = budget tak terbatas,
+//     used > max = manipulasi histori).
+//
+// Konsekuensi: file tamper membuat Load/Active/FindActive/Consume/Save
+// error semua sampai operator memperbaiki/menghapus file secara sadar.
 func (s *Store) readLocked() ([]Record, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
@@ -290,6 +312,23 @@ func (s *Store) readLocked() ([]Record, error) {
 	if err := json.Unmarshal(data, &recs); err != nil {
 		// Fail-closed: store korup tidak pernah di-reset diam-diam.
 		return nil, fmt.Errorf("approval: parse store %s: %w", s.path, err)
+	}
+	seen := make(map[string]bool, len(recs))
+	for i := range recs {
+		r := recs[i]
+		if r.ID == "" {
+			return nil, fmt.Errorf("approval: store %s: record #%d tanpa id — store tampered (fail-closed)", s.path, i)
+		}
+		if seen[r.ID] {
+			return nil, fmt.Errorf("approval: store %s: id %q duplikat — store tampered (fail-closed)", s.path, r.ID)
+		}
+		seen[r.ID] = true
+		if err := validateRecord(r); err != nil {
+			return nil, fmt.Errorf("approval: store %s: record %q tidak valid: %w (fail-closed)", s.path, r.ID, err)
+		}
+		if r.Used < 0 || r.Used > r.MaxRequests {
+			return nil, fmt.Errorf("approval: store %s: record %q used=%d di luar 0..max_requests=%d — store tampered (fail-closed)", s.path, r.ID, r.Used, r.MaxRequests)
+		}
 	}
 	return recs, nil
 }
