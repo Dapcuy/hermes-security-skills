@@ -108,8 +108,16 @@ dengan `capabilities/registry.yaml`; bila registry berubah, sinkronkan
 
 ```
 inspect_request, request_replay, response_comparison,
-list_history, json_diff, openapi_analysis
+list_history, json_diff, openapi_analysis,
+subfinder_enum, httpx_probe, nmap_scan, ffuf_fuzz
 ```
+
+Empat entri terakhir adalah capability tool pihak ketiga (ROADMAP §13.1):
+satu tool = satu image terkurasi (`hermes-tool-*`), dieksekusi lewat
+provider docker dengan wrapper yang menegakkan policy bundle, budget, dan
+rate limit. Menyebut identifier capability ini di section `Required
+Capabilities` diizinkan; instruksi "gunakan <tool>" tetap dilarang oleh
+aturan `hardcoded-tool`.
 
 ### 6. `naming-hint` — konsistensi nama (peringatan)
 

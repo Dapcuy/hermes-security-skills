@@ -580,6 +580,87 @@ func TestToolsCallListHistoryFilterAndLimit(t *testing.T) {
 	}
 }
 
+// TestToolsCallListHistoryCaseFilter: argument opsional "case" memfilter
+// index berdasarkan case_id evidence (alur case end-to-end).
+func TestToolsCallListHistoryCaseFilter(t *testing.T) {
+	// Evidence fixture dengan case_id: 2 entri mem-demo + 1 entri case lain.
+	dir := t.TempDir()
+	es, err := proxycore.NewEvidenceStore(dir)
+	if err != nil {
+		t.Fatalf("NewEvidenceStore: %v", err)
+	}
+	mk := func(method, url, caseID string) proxycore.EvidenceRecord {
+		return proxycore.EvidenceRecord{
+			CaseID: caseID,
+			Request: proxycore.EvidenceRequest{
+				Method: method, URL: url, Headers: proxycore.RedactHeaders(http.Header{}),
+				BodyEncoding: "base64",
+			},
+			Response: proxycore.EvidenceResponse{
+				Status: 200, Headers: proxycore.RedactHeaders(http.Header{}),
+				BodyEncoding: "base64",
+			},
+		}
+	}
+	for _, rec := range []proxycore.EvidenceRecord{
+		mk("GET", "http://localhost:8901/a", "mem-demo"),
+		mk("GET", "http://localhost:8901/b", "mem-demo"),
+		mk("POST", "http://localhost:8901/c", "case-lain"),
+	} {
+		if _, _, err := es.Write(rec); err != nil {
+			t.Fatalf("Write evidence: %v", err)
+		}
+	}
+
+	srv, _ := newTestServer(t, nil, func(c *Config) { c.EvidenceDir = dir })
+	resps := runServer(t, srv,
+		mustRequest(t, 30, "tools/call", map[string]any{
+			"name": "list_history", "arguments": map[string]any{"case": "mem-demo"},
+		}),
+		mustRequest(t, 31, "tools/call", map[string]any{
+			"name": "list_history", "arguments": map[string]any{"case": "tidak-ada"},
+		}),
+		mustRequest(t, 32, "tools/call", map[string]any{
+			"name": "list_history", "arguments": map[string]any{},
+		}),
+	)
+	type histBody struct {
+		Status  string `json:"status"`
+		Count   int    `json:"count"`
+		Entries []struct {
+			Seq    int64  `json:"seq"`
+			CaseID string `json:"case_id"`
+		} `json:"entries"`
+	}
+	parse := func(i int) histBody {
+		t.Helper()
+		content := resps[i]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)
+		var b histBody
+		if err := json.Unmarshal([]byte(content["text"].(string)), &b); err != nil {
+			t.Fatalf("payload %d bukan JSON: %v", i, err)
+		}
+		return b
+	}
+	// Filter case mem-demo: 2 entri, keduanya membawa case_id.
+	b := parse(0)
+	if b.Status != "observed" || b.Count != 2 || len(b.Entries) != 2 {
+		t.Fatalf("filter mem-demo salah: %+v", b)
+	}
+	for _, e := range b.Entries {
+		if e.CaseID != "mem-demo" {
+			t.Errorf("entry case_id = %q, mau mem-demo", e.CaseID)
+		}
+	}
+	// Case tak dikenal: 0 entri, tetap observed (bukan error).
+	if b := parse(1); b.Status != "observed" || b.Count != 0 {
+		t.Errorf("case tidak-ada harus observed/0: %+v", b)
+	}
+	// Tanpa filter: semua 3 entri.
+	if b := parse(2); b.Count != 3 {
+		t.Errorf("tanpa filter mau 3, dapat %d", b.Count)
+	}
+}
+
 func TestToolsCallInspectRequestFromEventStore(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 22, "tools/call", map[string]any{

@@ -20,6 +20,8 @@ import (
 //	knowledge stale                            (MarkStale, report)
 //	case archive --case <id>                   (retention, §25)
 //
+// Implementasi case brief/list ada di casebrief.go (memory diperkuat).
+//
 // Semua operasi menulis audit entry (§35). Penyimpanan berada di
 // knowledge/ (canonical|proposed|reviewed) dan memory/cases/<caseID>.
 // Konten target HANYA bisa masuk lewat jalur programatik
@@ -295,13 +297,17 @@ func knowledgeStale(args []string) error {
 
 func cmdCase(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("case: butuh subcommand (archive)")
+		return fmt.Errorf("case: butuh subcommand (archive|brief|list)")
 	}
 	switch args[0] {
 	case "archive":
 		return caseArchive(args[1:])
+	case "brief":
+		return caseBriefCmd(args[1:])
+	case "list":
+		return caseListCmd(args[1:])
 	default:
-		return fmt.Errorf("case: subcommand tidak dikenal %q (archive)", args[0])
+		return fmt.Errorf("case: subcommand tidak dikenal %q (archive|brief|list)", args[0])
 	}
 }
 

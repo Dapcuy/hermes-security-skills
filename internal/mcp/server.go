@@ -198,7 +198,7 @@ var capabilityDescriptions = map[string]string{
 	"inspect_request":     "Inspect a captured HTTP request/response by evidence_ref — served from the event store index over hermes-proxy evidence files; headers stay redacted; no traffic to the target (read-only).",
 	"request_replay":      "Replay an HTTP request to an in-scope target through hermes-proxy. Policy (scope + risk + approval) dieksekusi in-line sebelum provider dipanggil (ROADMAP 4.3).",
 	"response_comparison": "Compare two captured HTTP exchanges (evidence_ref_a vs evidence_ref_b) and return observations {status_diff|header_diff|body_diff} — event store index, no traffic to the target (read-only).",
-	"list_history":        "List captured proxy traffic history from the event store (index over evidence-*.json). Optional filters: limit, url_substring, method, status_min. Read-only, no network.",
+	"list_history":        "List captured proxy traffic history from the event store (index over evidence-*.json). Optional filters: limit, url_substring, method, status_min, case. Read-only, no network.",
 	"json_diff":           "Structural diff of two JSON values (json_a vs json_b) — local provider, no network, no side effects.",
 	"openapi_analysis":    "Analyze an OpenAPI specification via docker validator (network=none).",
 }
@@ -213,6 +213,7 @@ var readOnlyInputSchemas = map[string]map[string]any{
 			"url_substring": map[string]any{"type": "string", "description": "filter: URL mengandung substring (case-insensitive)"},
 			"method":        map[string]any{"type": "string", "description": "filter: HTTP method exact (case-insensitive)"},
 			"status_min":    map[string]any{"type": "integer", "description": "filter: status >= nilai"},
+			"case":          map[string]any{"type": "string", "description": "filter: case_id engagement exact (label yang dikirim saat POST /execute)"},
 		},
 	},
 	"inspect_request": {
@@ -475,7 +476,7 @@ func (s *Server) toolsCall(params json.RawMessage) (any, *rpcError) {
 	if err != nil {
 		return nil, errInvalidParams(err.Error())
 	}
-	proxyResp, err := s.forwardToProxy(urlStr, method, headers, body)
+	proxyResp, err := s.forwardToProxy(urlStr, method, headers, body, caseID)
 	if err != nil {
 		s.auditDecision(p.Name, "error", err.Error(), &urlStr)
 		return callResult("error", map[string]any{
@@ -553,7 +554,7 @@ func (s *Server) eventStore() (*events.Store, *rpcError) {
 }
 
 // callListHistory: list_history → events.List dengan filter opsional
-// {limit, url_substring, method, status_min}.
+// {limit, url_substring, method, status_min, case}.
 func (s *Server) callListHistory(p callParams) (any, *rpcError) {
 	st, rerr := s.eventStore()
 	if rerr != nil {
@@ -573,6 +574,9 @@ func (s *Server) callListHistory(p callParams) (any, *rpcError) {
 	}
 	if v, ok := p.Arguments["status_min"].(float64); ok {
 		f.StatusMin = int(v)
+	}
+	if v, ok := p.Arguments["case"].(string); ok {
+		f.CaseID = strings.TrimSpace(v)
 	}
 	entries := st.List(f)
 	s.auditDecision(p.Name, "observed", "", nil)
@@ -710,20 +714,23 @@ func headersFromArgs(args map[string]any) (map[string]string, error) {
 }
 
 // proxyRequest payload POST {proxy}/execute — dikirim apa adanya ke control
-// channel hermes-proxy. headers/body di-omit bila kosong agar kompatibel
+// channel hermes-proxy. headers/body/case di-omit bila kosong agar kompatibel
 // dengan proxy yang ketat terhadap field tak dikenal (DisallowUnknownFields).
+// case diteruskan agar evidence + event index membawa case_id (label
+// engagement) — alur case end-to-end.
 type proxyRequest struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"`
+	Case    string            `json:"case,omitempty"`
 }
 
 // forwardToProxy memanggil POST {ProxyURL}/execute. Response non-2xx dari
 // proxy (policy in-line proxy menolak) diteruskan sebagai error — bukan
 // fallback ke provider lain (§5.1).
-func (s *Server) forwardToProxy(targetURL, method string, headers map[string]string, body string) (map[string]any, error) {
-	payload, err := json.Marshal(proxyRequest{URL: targetURL, Method: method, Headers: headers, Body: body})
+func (s *Server) forwardToProxy(targetURL, method string, headers map[string]string, body, caseID string) (map[string]any, error) {
+	payload, err := json.Marshal(proxyRequest{URL: targetURL, Method: method, Headers: headers, Body: body, Case: caseID})
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}

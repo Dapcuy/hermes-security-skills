@@ -148,6 +148,34 @@ func TestListFilters(t *testing.T) {
 	}
 }
 
+// TestListFilterCaseID: filter case_id exact pada index — evidence yang
+// ditulis dengan CaseID terbawa ke Entry dan bisa difilter per case.
+func TestListFilterCaseID(t *testing.T) {
+	dir := t.TempDir()
+	recs := sampleRecords()
+	recs[0].CaseID = "mem-demo"
+	recs[1].CaseID = "case-lain"
+	newEvidenceStore(t, dir, recs...)
+	st, err := LoadEvidenceDir(dir)
+	if err != nil {
+		t.Fatalf("LoadEvidenceDir: %v", err)
+	}
+
+	if got := st.List(ListFilter{CaseID: "mem-demo"}); len(got) != 1 || got[0].Method != "GET" {
+		t.Errorf("filter mem-demo salah: %+v", got)
+	}
+	if got := st.List(ListFilter{CaseID: "case-lain"}); len(got) != 1 || got[0].Method != "POST" {
+		t.Errorf("filter case-lain salah: %+v", got)
+	}
+	if got := st.List(ListFilter{CaseID: "tidak-ada"}); len(got) != 0 {
+		t.Errorf("case tak dikenal harus 0 entri: %+v", got)
+	}
+	// Tanpa filter case: semua entri tetap terlihat.
+	if got := st.List(ListFilter{}); len(got) != 2 {
+		t.Errorf("tanpa filter mau 2, dapat %d", len(got))
+	}
+}
+
 func TestInspect(t *testing.T) {
 	dir := t.TempDir()
 	newEvidenceStore(t, dir, sampleRecords()...)

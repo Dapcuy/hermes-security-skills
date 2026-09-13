@@ -58,3 +58,53 @@ capabilities:
     requires_scope: false
     requires_network: false
     image: hermes-validator-openapi
+
+  # --- Capability tool pihak ketiga (ROADMAP §13.1) ---
+  # Satu tool = satu image terkurasi (hermes-tool-*), di-build dan di-sign
+  # saat CI, tanpa install saat runtime. Wrapper di dalam image menegakkan
+  # policy bundle, budget, dan rate limit dari execution plan, lalu
+  # mengubah output tool menjadi validation-result.json + evidence dengan
+  # provenance. requires_network: true menandai image yang butuh egress
+  # terkendali — ke data source pihak ketiga (passive recon) atau ke
+  # target yang sudah lolos scope validation — dan hanya aktif setelah
+  # jalur egress tersedia (post-MVP, ROADMAP §5.2).
+
+  # Enumerasi subdomain pasif: egress hanya ke third-party data sources
+  # (sifat passive recon — tidak ada request ke target); domain target
+  # wajib in-scope.
+  subfinder_enum:
+    risk: low
+    default_provider: docker
+    requires_scope: true
+    requires_network: true
+    image: hermes-tool-subfinder
+
+  # HTTP probing atas daftar URL in-scope: status, title, indikasi
+  # teknologi per URL.
+  httpx_probe:
+    risk: low
+    default_provider: docker
+    requires_scope: true
+    requires_network: true
+    image: hermes-tool-httpx
+
+  # Port scanning aktif = risk HIGH: approval eksplisit SELALU wajib
+  # (policy/risk.yaml high -> approval_required, tidak pernah automatic);
+  # metode dan port range dibatasi execution plan (ROADMAP §8, §13.1, §14).
+  nmap_scan:
+    risk: high
+    default_provider: docker
+    requires_scope: true
+    requires_network: true
+    requires_approval: always
+    image: hermes-tool-nmap
+
+  # Directory fuzzing terkendali: wordlist ter-bake di image, budget dan
+  # rate limit dipaksa wrapper; approval conditional sesuai risk medium.
+  ffuf_fuzz:
+    risk: medium
+    default_provider: docker
+    requires_scope: true
+    requires_network: true
+    requires_approval: conditional
+    image: hermes-tool-ffuf

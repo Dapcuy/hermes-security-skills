@@ -25,12 +25,15 @@ const maxRedirectHops = 10
 // (proteksi DoS ukuran; berlaku untuk evidence maupun passthrough MITM).
 const maxStoreBodyBytes = 8 << 20
 
-// Request adalah payload POST /execute {url, method, headers, body}.
+// Request adalah payload POST /execute {url, method, headers, body, case}.
 type Request struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"`
+	// Case opsional: label engagement untuk evidence + event index
+	// (field case_id). Slug [a-z0-9-], maks 64 — divalidasi fail-closed.
+	Case string `json:"case,omitempty"`
 }
 
 // Response adalah response target yang dikembalikan ke pemanggil API.
@@ -197,6 +200,22 @@ func isRedirectStatus(code int) bool {
 		code == http.StatusPermanentRedirect
 }
 
+// validCaseID memvalidasi field `case` opsional (slug sederhana):
+// [a-z0-9-], 1..64 karakter. String kosong berarti tanpa case (opsional).
+// Charset ketat = aman dipakai sebagai label evidence/index dan mencegah
+// path traversal / injeksi label (fail-closed).
+func validCaseID(s string) bool {
+	if len(s) == 0 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
 // Execute menjalankan satu permintaan replay dengan seluruh jalur policy
 // in-line (§11): (a) scope check per hop, (b) rate limit token bucket,
 // (c) budget max_requests, (d) redirect no-follow default / re-validate bila
@@ -218,6 +237,16 @@ func (e *Engine) Execute(ctx context.Context, req Request) (Result, *Denial, err
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return Result{}, &Denial{HTTP: http.StatusBadRequest, Reason: "url tidak valid"}, nil
+	}
+
+	// Validasi case opsional (fail-closed, sebelum network dan evidence):
+	// slug [a-z0-9-] maks 64, TANPA trim — nilai non-kosong apa pun yang
+	// bukan slug valid (termasuk whitespace) ditolak bersih sebagai 400,
+	// sama seperti header invalid. Kosong = tanpa case (opsional).
+	caseID := req.Case
+	if caseID != "" && !validCaseID(caseID) {
+		return Result{}, &Denial{HTTP: http.StatusBadRequest,
+			Reason: fmt.Sprintf("case %q tidak valid (slug [a-z0-9-], maks 64 karakter)", caseID)}, nil
 	}
 
 	// Validasi nama/nilai header instruksi (fail-closed, sebelum network dan
@@ -334,8 +363,10 @@ func (e *Engine) Execute(ctx context.Context, req Request) (Result, *Denial, err
 	}
 
 	// Evidence (§25): satu file per eksekusi; request/response penuh (header
-	// diredaksi, body base64) + sha256 + captured_at + provenance.
+	// diredaksi, body base64) + sha256 + captured_at + provenance + case_id
+	// (bila caller menyertakan field `case`).
 	rec := EvidenceRecord{
+		CaseID: caseID,
 		Request: EvidenceRequest{
 			Method:       method,
 			URL:          rawURL,

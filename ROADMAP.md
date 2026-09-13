@@ -953,8 +953,29 @@ runtimes/docker/images/
 ├── json-validator/      distroless · buatan sendiri
 ├── python-validator/    python:slim · buatan sendiri
 ├── proxy/               distroless · SATU-SATUNYA egress
-└── tool-nuclei/         distroless + wrapper · ter-pin
-    (tool-nmap dan lainnya menyusul lewat pintu yang sama)
+├── tool-nuclei/         distroless + wrapper · ter-pin
+├── tool-subfinder/      distroless + wrapper · ter-pin
+├── tool-httpx/          distroless + wrapper · ter-pin
+├── tool-nmap/           debian-slim + wrapper · ter-pin (-sT, cap_drop ALL)
+└── tool-ffuf/           distroless + wrapper · ter-pin (wordlist ter-bake)
+```
+
+### Tool images terdaftar (berjalan lewat pintu yang sama, §13.1)
+
+Satu baris per image tool pihak ketiga yang sudah masuk struktur di atas —
+semuanya satu tool = satu image, versi di-pin saat build, dibungkus wrapper
+fail-closed, output dinormalisasi ke validation-result.json + provenance:
+
+```
+hermes-tool-subfinder  — enumerasi subdomain pasif (OSINT, tanpa traffic
+                         langsung ke target; hasil tetap observation)
+hermes-tool-httpx      — probing HTTP untuk verifikasi host alive + teknik
+                         server (GET ringan; scope check per target)
+hermes-tool-nmap       — port scanning mode -sT (connect scan) saja — tidak
+                         butuh NET_RAW, kompatibel cap_drop: ALL
+hermes-tool-ffuf       — directory/content fuzzing; WORDLIST TER-BAKE ke
+                         image saat build (di-pin per tag SecLists) — tidak
+                         ada download wordlist saat runtime
 ```
 
 ---
@@ -2455,6 +2476,13 @@ container cleanup success     = 100%
 [ ] Baseline pertama terdokumentasi di CHANGELOG
 ```
 
+> **STATUS (update):** benchmark dasar SUDAH dieksekusi — hasil permanen ada
+> di `benchmarks/RESULTS.md` (mode policy 8/8, mode proxy, stress test,
+> cold-start, verifikasi baseline §15/§16). **Lab dihapus pasca-benchmark
+> sesuai keputusan owner:** repo ini kini fokus pada skill + tool + runtime;
+> kebutuhan lab environment mendatang dipisah ke repo terdedikasi (target
+> reproduksi: siapkan target sendiri, lihat catatan di `benchmarks/RESULTS.md`).
+
 ---
 
 # 43. Phase 12 — Specialized Expansion
@@ -2473,6 +2501,10 @@ responsible-disclosure
 ```
 
 Prioritas berdasarkan kebutuhan nyata, bukan jumlah skill.
+
+> **Catatan (terkait §42):** mengikuti keputusan owner yang sama, lab
+> environment repo dihapus pasca-benchmark — pengukuran kualitas berikutnya
+> memakai repo lab terpisah; repo ini tetap fokus skill + tool + runtime.
 
 ---
 

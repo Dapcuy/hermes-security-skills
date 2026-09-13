@@ -51,9 +51,9 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 ## Core Concepts
 
 - **core/** (Tier 1): fondasi setiap engagement — scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting.
-- **recon/** (Tier 2): pemetaan permukaan tanpa menyentuh target — recon pasif dari sumber publik, ekstraksi endpoint dari data terekam, fingerprint teknologi, dan prioritisasi permukaan; `web-surface-mapping` yang satu tier dengannya berada di `web/`.
+- **recon/** (Tier 2): pemetaan permukaan — recon pasif dari sumber publik, enumerasi subdomain pasif via data source, probing teknologi aktif atas aset in-scope, port scanning terkendali ber-approval, indikasi subdomain takeover, ekstraksi endpoint dari data terekam, fingerprint teknologi, dan prioritisasi permukaan; `web-surface-mapping` yang satu tier dengannya berada di `web/`.
 - **http/** (Tier 3, placeholder): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, auth flow, capture browser.
-- **web/** (Tier 4): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, injection, SSRF, CSRF, upload, misconfiguration, dan validasi payload.
+- **web/** (Tier 4): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, injection, SSRF, CSRF, upload, misconfiguration, validasi payload, dan penemuan path tersembunyi via fuzzing terkendali.
 - **api/** (Tier 5, placeholder): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token, rate limit, dan webhook.
 - **business-logic/** (Tier 6): kerentanan yang tak tertangkap scanner — workflow, transaksi, replay, race condition, isolasi multi-tenant, dan vulnerability chaining.
 - **source/** (Tier 7): review source code yang sepenuhnya pasif — triage codebase, review authorization, data flow server-side, deteksi secret, dan risiko dependensi; tanpa capability aktif.
@@ -115,15 +115,15 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 | Kategori | Tier | Isi | Jumlah skill |
 |---|---|---|---|
 | `core/` | 1 | Fondasi setiap engagement: scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting. | 7 |
-| `recon/` | 2 | Pemetaan permukaan tanpa menyentuh target: recon pasif dari sumber publik, ekstraksi endpoint dari data terekam, fingerprint teknologi, prioritisasi permukaan. | 4 |
+| `recon/` | 2 | Pemetaan permukaan: recon pasif dari sumber publik, enumerasi subdomain pasif, probing teknologi aktif, port scanning terkendali (approval wajib), indikasi subdomain takeover, ekstraksi endpoint, fingerprint teknologi, prioritisasi permukaan. | 8 |
 | `http/` | 3 | (Placeholder) metodologi operasi HTTP melalui capability proxy: traffic analysis, replay, mutation, comparison. | 4 |
-| `web/` | 4 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, injection, SSRF, CSRF, misconfiguration, validasi payload. | 10 |
+| `web/` | 4 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, injection, SSRF, CSRF, misconfiguration, validasi payload, penemuan path via fuzzing terkendali. | 11 |
 | `api/` | 5 | (Placeholder) metodologi keamanan API: methodology, OpenAPI, REST, GraphQL, token, rate limit, webhook. | 2 |
 | `business-logic/` | 6 | Kerentanan yang tak tertangkap scanner: workflow, transaksi, replay, race condition, isolasi multi-tenant, vulnerability chaining. | 8 |
 | `source/` | 7 | Review source code yang sepenuhnya pasif: triage codebase, review authorization, data flow server-side, deteksi secret, risiko dependensi. | 5 |
 | `specialized/` | 8 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: keamanan integrasi LLM, keamanan MCP, responsible disclosure. | 3 |
 
-**Total: 43 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui; lihat False Positive Checks).
+**Total: 48 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui; lihat False Positive Checks).
 
 ## Related Skills
 

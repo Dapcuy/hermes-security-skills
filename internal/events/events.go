@@ -27,8 +27,8 @@ import (
 const DefaultDir = "jobs/evidence"
 
 // Entry satu baris index event store: ringkasan satu eksekusi ter-capture.
-// case_id kosong — evidence file proxy saat ini tidak membawa case id;
-// field disiapkan untuk format evidence berikutnya (opsional di §25).
+// CaseID diisi dari field case_id evidence (label engagement opsional yang
+// dikirim caller via POST /execute "case"); kosong = eksekusi tanpa case.
 type Entry struct {
 	Seq         int64  `json:"seq"`
 	TS          string `json:"ts"` // captured_at dari evidence (RFC3339Nano)
@@ -46,6 +46,7 @@ type ListFilter struct {
 	URLSubstring string // URL harus mengandung substring (case-insensitive)
 	Method       string // HTTP method exact, case-insensitive
 	StatusMin    int    // status >= StatusMin (0/1 = tanpa filter)
+	CaseID       string // case_id exact (label engagement; kosong = tanpa filter)
 }
 
 // Observation satu temuan diff — struktur SAMA dengan kontrak validator
@@ -111,6 +112,7 @@ func (s *Store) Entries() []Entry {
 func (s *Store) List(f ListFilter) []Entry {
 	method := strings.ToUpper(strings.TrimSpace(f.Method))
 	sub := strings.ToLower(strings.TrimSpace(f.URLSubstring))
+	caseID := strings.TrimSpace(f.CaseID)
 	out := make([]Entry, 0, len(s.entries))
 	for _, e := range s.entries {
 		if sub != "" && !strings.Contains(strings.ToLower(e.URL), sub) {
@@ -120,6 +122,9 @@ func (s *Store) List(f ListFilter) []Entry {
 			continue
 		}
 		if f.StatusMin > 1 && e.Status < f.StatusMin {
+			continue
+		}
+		if caseID != "" && e.CaseID != caseID {
 			continue
 		}
 		out = append(out, e)
@@ -134,7 +139,8 @@ func (s *Store) List(f ListFilter) []Entry {
 
 // coreRecord mirror field evidence core proxycore.EvidenceRecord — urutan dan
 // tag JSON WAJIB identik agar sha256 terverifikasi ulang dengan hasil sama
-// (sha256 dihitung atas konten core TANPA field sha256, §25).
+// (sha256 dihitung atas konten core TANPA field sha256, §25). Field CaseID
+// wajib berada di posisi yang sama (setelah LatencyMS) dengan mirror-nya.
 type coreRecord struct {
 	Seq        int64             `json:"seq"`
 	CapturedAt string            `json:"captured_at"`
@@ -144,6 +150,7 @@ type coreRecord struct {
 	Redirect   rawRedirect       `json:"redirect"`
 	Hops       []rawHop          `json:"hops,omitempty"`
 	LatencyMS  int64             `json:"latency_ms"`
+	CaseID     string            `json:"case_id,omitempty"`
 }
 
 // rawRecord bentuk penuh evidence-<seq>.json (core + sha256).
@@ -230,6 +237,7 @@ func buildIndex(dir string) ([]Entry, error) {
 			Status:      rec.Response.Status,
 			EvidenceRef: filepath.Base(p),
 			SHA256:      rec.SHA256,
+			CaseID:      rec.CaseID,
 		})
 	}
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Seq < entries[j].Seq })

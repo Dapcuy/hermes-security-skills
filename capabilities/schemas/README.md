@@ -44,7 +44,7 @@ Per capability:
 | `default_provider`  | string | ya    | `proxy` / `docker` / `local` | Proxy = satu-satunya egress; docker = validator `network=none`; local = komputasi murni tanpa side effect (ROADMAP §5.2, §5.3). |
 | `requires_scope`    | bool   | ya    | `true` / `false` | `true` berarti target wajib lolos scope validation (ROADMAP §8). `false` hanya untuk operasi yang tidak menyentuh target (mis. baca event store, analisis dokumen lokal). |
 | `requires_network`  | bool   | ya    | `true` / `false` | `true` hanya boleh dilayani proxy provider (ROADMAP §5.2). |
-| `requires_approval` | string | tidak | `conditional` | Ada hanya untuk capability aktif yang bisa menyentuh state target (mis. `request_replay`). |
+| `requires_approval` | string | tidak | `conditional` / `always` | Ada hanya untuk capability aktif yang bisa menyentuh state target (mis. `request_replay` memakai `conditional`; `nmap_scan` memakai `always` — port scanning wajib approval sebelum eksekusi). |
 | `image`             | string | tidak | nama image terkurasi | Wajib untuk capability dengan `default_provider: docker` (mis. `hermes-validator-openapi`). Versi/digest image dicatat di execution plan (ROADMAP §14), bukan di registry. |
 
 ## Cara menambah capability baru

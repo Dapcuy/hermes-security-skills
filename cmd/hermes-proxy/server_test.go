@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"hermes-security-skills/internal/events"
 	"hermes-security-skills/internal/proxycore"
 )
 
@@ -116,6 +117,113 @@ func TestHandleExecuteEndToEnd(t *testing.T) {
 	}
 	if hit.Load() != 1 {
 		t.Errorf("target dipanggil %d kali", hit.Load())
+	}
+}
+
+// TestHandleExecuteCaseFlowsToEvidence: field opsional "case" mengalir
+// end-to-end — evidence file membawa case_id, event index (internal/events)
+// mengisi field case_id-nya, dan filter case pada List bekerja.
+func TestHandleExecuteCaseFlowsToEvidence(t *testing.T) {
+	api, target, _, evDir := newTestStack(t, nil)
+	targetURL := strings.Replace(target.URL, "127.0.0.1", "localhost", 1)
+
+	// 1) Eksekusi dengan case.
+	body := fmt.Sprintf(`{"url":%q,"method":"GET","case":"mem-demo"}`, targetURL+"/halo")
+	code, m := postExecute(t, api, body)
+	if code != http.StatusOK || m["status"] != "executed" {
+		t.Fatalf("code = %d status = %v, mau 200/executed", code, m["status"])
+	}
+	ref, _ := m["evidence_ref"].(string)
+	if ref == "" {
+		t.Fatal("evidence_ref wajib ada")
+	}
+
+	// 2) Evidence file berisi case_id.
+	raw, err := os.ReadFile(filepath.Join(evDir, ref))
+	if err != nil {
+		t.Fatalf("baca evidence: %v", err)
+	}
+	var ev struct {
+		CaseID string `json:"case_id"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		t.Fatalf("parse evidence: %v", err)
+	}
+	if ev.CaseID != "mem-demo" {
+		t.Errorf("evidence case_id = %q, mau %q", ev.CaseID, "mem-demo")
+	}
+
+	// 3) Event index terisi + filter case bekerja.
+	st, err := events.LoadEvidenceDir(evDir)
+	if err != nil {
+		t.Fatalf("LoadEvidenceDir: %v", err)
+	}
+	if st.Count() != 1 {
+		t.Fatalf("index count = %d, mau 1", st.Count())
+	}
+	if got := st.Entries()[0].CaseID; got != "mem-demo" {
+		t.Errorf("index case_id = %q, mau mem-demo", got)
+	}
+	if n := len(st.List(events.ListFilter{CaseID: "mem-demo"})); n != 1 {
+		t.Errorf("filter case mem-demo = %d entri, mau 1", n)
+	}
+	if n := len(st.List(events.ListFilter{CaseID: "case-lain"})); n != 0 {
+		t.Errorf("filter case case-lain = %d entri, mau 0", n)
+	}
+
+	// 4) Eksekusi tanpa case: index case_id tetap kosong.
+	body = fmt.Sprintf(`{"url":%q,"method":"GET"}`, targetURL+"/tanpa-case")
+	if code, m := postExecute(t, api, body); code != http.StatusOK || m["status"] != "executed" {
+		t.Fatalf("eksekusi tanpa case: code = %d (%v)", code, m)
+	}
+	st2, err := events.LoadEvidenceDir(evDir)
+	if err != nil {
+		t.Fatalf("LoadEvidenceDir kedua: %v", err)
+	}
+	var withCase, withoutCase int
+	for _, e := range st2.Entries() {
+		if e.CaseID == "mem-demo" {
+			withCase++
+		} else if e.CaseID == "" {
+			withoutCase++
+		}
+	}
+	if withCase != 1 || withoutCase != 1 {
+		t.Errorf("index case: withCase=%d withoutCase=%d, mau 1/1", withCase, withoutCase)
+	}
+}
+
+// TestHandleExecuteCaseInvalid: case invalid ditolak fail-closed (400) dan
+// tidak pernah sampai ke target.
+func TestHandleExecuteCaseInvalid(t *testing.T) {
+	api, target, hit, _ := newTestStack(t, nil)
+	targetURL := strings.Replace(target.URL, "127.0.0.1", "localhost", 1)
+
+	cases := []struct {
+		name    string
+		caseVal string
+	}{
+		{"huruf besar", "Mem-Demo"},
+		{"underscore", "mem_demo"},
+		{"spasi", "mem demo"},
+		{"kosong spasi", "   "},
+		{"lebih dari 64", strings.Repeat("a", 65)},
+		{"path traversal", "../evil"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"url":%q,"method":"GET","case":%q}`, targetURL+"/x", tc.caseVal)
+			code, m := postExecute(t, api, body)
+			if code != http.StatusBadRequest {
+				t.Errorf("code = %d, mau 400 (%v)", code, m)
+			}
+			if m["status"] != "denied" {
+				t.Errorf("status = %v, mau denied", m["status"])
+			}
+		})
+	}
+	if hit.Load() != 0 {
+		t.Errorf("target dipanggil %d kali, mau 0 (case invalid ditolak sebelum network)", hit.Load())
 	}
 }
 

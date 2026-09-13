@@ -204,6 +204,15 @@ sesuai kriteria acceptance §16.
 
 ## Cara Reproduksi
 
+> **Catatan lab (keputusan owner):** lab environment repo (`labs/docker-compose.yml`)
+> dihapus PASCA-benchmark ini sesuai keputusan owner — repo kini fokus pada
+> skill + tool + runtime, dan kebutuhan lab mendatang dipisah ke repo terdedikasi.
+> Hasil pengukuran di atas tetap valid (diukur sebelum penghapusan) dan dokumen
+> ini yang permanen. Untuk mereproduksi: **siapkan target sendiri** — langkah 2
+> di bawah cukup mengarahkan proxy ke target HTTP lokal apa pun yang di-allowlist
+> bundle (mis. `python -m http.server 3000` untuk uji pola, atau image lab
+> pilihan Anda seperti OWASP Juice Shop).
+
 ```bash
 # 0) Toolchain + build (Git Bash)
 export PATH="$TEMP/go/bin:$PATH" GOCACHE="$TEMP/gocache" GOPATH="$TEMP/gopath"
@@ -214,7 +223,8 @@ go build -o "$TEMP/go/bin/hermes-proxy.exe"    ./cmd/hermes-proxy
 hermes-security benchmark run --scenarios benchmarks/scenarios.json \
   --audit-file "$TEMP/audit-policy.jsonl" --out "$TEMP/bench-policy.json"
 
-# 2) Mode proxy — target lokal di 127.0.0.1:3000 (mis. Juice Shop lab)
+# 2) Mode proxy — target lokal di 127.0.0.1:3000 (siapkan target sendiri;
+#    lab repo sudah dihapus — lihat catatan lab di atas, keputusan owner)
 cat > "$TEMP/bundle-a.json" <<'EOF'
 {"version":1,"allowed_hosts":["localhost:3000"],"max_requests":20,"rate_limit_rps":3,"follow_redirects":false,"timeout_seconds":15,"max_body_bytes":8192}
 EOF

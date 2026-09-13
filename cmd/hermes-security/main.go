@@ -105,6 +105,9 @@ Commands:
   case               case memory (ROADMAP 25, 27):
                      case archive --case <id> (retention: arsipkan case yang
                      entry-nya sudah expired ke memory/cases/<case>.archived)
+                     case brief --case <id> (ringkasan konteks case: status
+                     workspace, approval + sisa budget, request/evidence)
+                     case list (daftar semua case dari jobs/ + status)
   benchmark          benchmark harness lab (ROADMAP 42, 43):
                      benchmark run --scenarios benchmarks/scenarios.json
                      [--proxy-url URL] [--scope-file f] [--out file]

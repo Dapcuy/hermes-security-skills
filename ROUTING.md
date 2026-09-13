@@ -26,15 +26,19 @@ Aturan pemakaian:
 |---|---|---|
 | Perlu pemetaan awal target tanpa menyentuh target secara aktif | `passive-recon` | `engagement-scoping` |
 | History masih kosong, perlu bahan aset dari sumber publik (CT logs, DNS, dork, arsip) | `passive-recon` | `web-surface-mapping` |
+| Perlu daftar kandidat subdomain terluas untuk domain in-scope dari third-party data sources | `subdomain-enumeration` | `passive-recon`, `subdomain-takeover` |
 | Perlu memetakan permukaan web (routes, parameter, fitur) | `web-surface-mapping` | `endpoint-discovery` |
 | Perlu daftar endpoint tersembunyi / tidak terdokumentasi | `endpoint-discovery` | `web-surface-mapping` |
 | Sudah ada traffic terekam (termasuk robots/sitemap ter-capture), perlu daftar endpoint dari data yang ada | `endpoint-discovery` | `web-surface-mapping` |
 | Perlu tahu teknologi dan stack target | `technology-fingerprinting` | `passive-recon` |
 | Header dan pola respons terekam, perlu identifikasi server/framework dari data yang sudah ada | `technology-fingerprinting` | `false-positive-analysis` |
+| Daftar URL/host in-scope sudah ada, perlu tahu mana yang hidup beserta status dan teknologinya (probe aktif) | `technology-probing` | `technology-fingerprinting`, `subdomain-enumeration` |
+| Program mengizinkan port scanning dan approval scoped eksplisit (host + port range) sudah siap | `port-scanning` | `attack-surface-prioritization`, `technology-probing` |
+| Indikasi subdomain mengarah ke layanan pihak ketiga yang bisa di-claim (dangling DNS) | `subdomain-takeover` | `subdomain-enumeration`, `false-positive-analysis` |
 | Banyak permukaan, perlu prioritas mana diuji duluan | `attack-surface-prioritization` | `security-task-routing` |
 | Inventaris sudah lengkap, perlu peta prioritas (auth, admin, upload, API versi lama) untuk hypothesis | `attack-surface-prioritization` | `hypothesis-management` |
 
-Catatan: seluruh rute Tier 2 bersifat pasif — nol request ke target; skill ini aman dijalankan walau authorization masih `pending`. Kebutuhan verifikasi aktif atas hasilnya dirutekan ke skill eksekusi (Tier 3 ke atas) dengan approval tersendiri.
+Catatan: `passive-recon`, `endpoint-discovery`, `technology-fingerprinting`, `attack-surface-prioritization`, dan `subdomain-enumeration` bersifat pasif — nol request ke target (egress `subdomain-enumeration` hanya ke third-party data sources), aman dijalankan walau authorization masih `pending`. `technology-probing`, `port-scanning`, dan `subdomain-takeover` mengirim request ke target: wajib authorization `granted`/`offline-lab`, dan `port-scanning` ber-risk HIGH selalu menuntut approval scoped eksplisit (ROADMAP §8, §9, §13.1). Kebutuhan verifikasi lanjutan dirutekan ke skill eksekusi (Tier 3 ke atas) dengan approval tersendiri.
 
 ## 3. HTTP Proxy (Tier 3)
 
@@ -64,6 +68,7 @@ Catatan: semua operasi HTTP aktif hanya melalui capability proxy (`request_repla
 | Dugaan SQL/command/template injection | `injection-analysis` | `vulnerability-validation` |
 | Header CORS/kebijakan origin janggal | `cors-analysis` | `security-misconfiguration` |
 | Konfigurasi terbuka (debug, default creds, listing) | `security-misconfiguration` | `passive-recon` |
+| Dugaan ada path/direktori tersembunyi (backup, panel, staging) di bawah prefix in-scope | `directory-fuzzing` | `web-surface-mapping`, `endpoint-discovery` |
 
 ## 5. API Security (Tier 5)
 

@@ -4,6 +4,20 @@ Semua perubahan yang menonjol pada project ini didokumentasikan di file ini.
 
 Format mengikuti semangat [Keep a Changelog](https://keepachangelog.com/), penomoran versi mengikuti [Semantic Versioning](https://semver.org/). Bahasa: naskah Indonesia, istilah teknis Inggris.
 
+## [Unreleased]
+
+### Added
+
+- **Empat tool image pihak ketiga (§13.1):** `hermes-tool-subfinder` (enumerasi subdomain pasif), `hermes-tool-httpx` (probing HTTP), `hermes-tool-nmap` (port scan mode `-sT`), `hermes-tool-ffuf` (directory fuzzing dengan wordlist ter-bake ke image, di-pin per tag SecLists) — semuanya satu tool = satu image, versi di-pin saat build, dibungkus wrapper fail-closed yang menormalisasi output ke validation-result.json + provenance.
+- **Lima skill pentest baru:** `subdomain-enumeration`, `subdomain-takeover`, `port-scanning`, `technology-probing` (recon), dan `directory-fuzzing` (web).
+- **`hermes-security case brief --case <id>`** — ringkasan konteks satu case dalam satu output: status workspace `jobs/<case>/` (aktif/aborted), approval store (state aktif/revoked/expired/habis + sisa budget), dan statistik event index (jumlah request per method, rentang waktu, evidence terakhir + sha256) — plus catatan eksplisit bila sumber data kosong.
+- **`hermes-security case list`** — daftar semua case dari `jobs/` beserta statusnya (direktori evidence dikecualikan).
+- **Alur `case_id` end-to-end (memory diperkuat):** POST `/execute` hermes-proxy menerima field opsional `case` (slug `[a-z0-9-]` maks 64, ditolak fail-closed bila invalid); evidence file membawa `case_id`; index event store (`internal/events`) mengisi field `case_id` dan `list_history` menerima filter opsional `case`; MCP `request_replay` meneruskan `case` ke proxy sehingga evidence + index terlabel per engagement.
+
+### Removed
+
+- **Direktori `labs/` dihapus pasca-benchmark (keputusan owner).** Repo fokus pada skill + tool + runtime; kebutuhan lab environment mendatang dipisah ke repo terdedikasi. Makefile tidak lagi punya target `lab-up`/`lab-down`; hasil benchmark tetap permanen di `benchmarks/RESULTS.md` (reproduksi: siapkan target sendiri).
+
 ## [2.1.0] — Caido digantikan hermes-proxy
 
 Revisi arsitektur proxy. Perubahan utama:

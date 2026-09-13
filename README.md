@@ -36,7 +36,7 @@ Dua prinsip ini bersifat mutlak dan menjadi dasar seluruh desain:
 
 ## Quickstart
 
-Prasyarat: **Go 1.22+** (stdlib only), **Python 3** (skill-linter dan target uji lokal), **Docker** (opsional — validator image dan offline lab), **make** (opsional — di Windows sering tidak terpasang; pakai perintah langsung di bawah).
+Prasyarat: **Go 1.22+** (stdlib only), **Python 3** (skill-linter dan target uji lokal), **Docker** (opsional — validator image), **make** (opsional — di Windows sering tidak terpasang; pakai perintah langsung di bawah).
 
 ```bash
 # 1. Build semua package Go (control plane, hermes-proxy, validator)
@@ -54,9 +54,11 @@ docker build -f runtimes/docker/images/http-validator/Dockerfile \
 ```
 
 Empat perintah di atas setara dengan target Makefile `go-build`, `go-test`,
-`lint-skills`, dan `docker-build`. Target lain: `go-vet` = `go vet ./...`,
-`lab-up`/`lab-down` = `docker compose -f labs/docker-compose.yml up -d|down`
-(hanya untuk offline lab, §8/§42).
+`lint-skills`, dan `docker-build`. Target lain: `go-vet` = `go vet ./...`.
+Catatan: lab environment (dulu di `labs/`) dihapus pasca-benchmark sesuai
+keputusan owner — repo fokus pada skill + tool + runtime; kebutuhan lab
+mendatang memakai repo terpisah (lihat `ROADMAP.md` §42/§43 dan
+`benchmarks/RESULTS.md`).
 
 Coba hermes-proxy (replay engine) end-to-end — satu perintah, bisa
 dijalankan ulang, otomatis shutdown + cleanup:

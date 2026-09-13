@@ -44,6 +44,8 @@ type EvidenceResponse struct {
 
 // EvidenceRecord adalah konten evidence file (tanpa field sha256; sha256
 // dihitung ATAS konten ini lalu ditambahkan sebagai field terpisah).
+// CATATAN: mirror coreRecord di internal/events WAJIB mengikuti urutan field
+// dan tag JSON struct ini persis agar verifikasi sha256 tetap cocok (§25).
 type EvidenceRecord struct {
 	Seq        int64             `json:"seq"`
 	CapturedAt string            `json:"captured_at"`
@@ -53,6 +55,7 @@ type EvidenceRecord struct {
 	Redirect   RedirectInfo      `json:"redirect"`
 	Hops       []HopSummary      `json:"hops,omitempty"`
 	LatencyMS  int64             `json:"latency_ms"`
+	CaseID     string            `json:"case_id,omitempty"` // label engagement (opsional, slug)
 }
 
 // evidenceFile adalah bentuk final evidence-<seq>.json.
