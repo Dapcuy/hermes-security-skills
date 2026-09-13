@@ -29,7 +29,7 @@ htmlcov/
 # ---- Case & job data (data engagement, tidak pernah masuk repo) ----
 memory/cases/
 memory/global/
-jobs/
+/jobs/
 jobs/*.json
 logs/
 *.log
