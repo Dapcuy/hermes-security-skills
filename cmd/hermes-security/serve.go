@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"hermes-security-skills/internal/approval"
 	"hermes-security-skills/internal/capability"
@@ -79,8 +82,52 @@ func cmdServe(args []string) error {
 		mcp.ProtocolVersion, reg.Count(), *registryPath)
 	fmt.Fprintf(os.Stderr, "serve: proxy control channel: %s; approval store: %s\n", *proxyURL, store.Path())
 	fmt.Fprintf(os.Stderr, "serve: event store (read-only): %s\n", *evidenceDir)
-	fmt.Fprintln(os.Stderr, "serve: menunggu request JSON-RPC di stdin (EOF untuk keluar)...")
+	fmt.Fprintln(os.Stderr, "serve: menunggu request JSON-RPC di stdin (EOF untuk keluar, SIGINT/SIGTERM untuk shutdown)...")
 
-	// Jalankan sampai stdin EOF. stdout HANYA berisi response JSON-RPC.
-	return srv.Serve(os.Stdin, os.Stdout)
+	// Graceful shutdown (§35): SIGINT/SIGTERM memicu shutdown terkontrol.
+	// Loop serve berjalan di goroutine (loop stdio tidak bisa di-interrupt
+	// tanpa menutup stdin); saat sinyal datang, entry audit "shutdown"
+	// ditulis utuh SEBELUM proses keluar sehingga audit tidak pernah
+	// tertulis setengah. Response JSON-RPC in-flight ditulis dalam satu
+	// Flush per baris — tidak ada response yang tertulis separuh.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- srv.Serve(os.Stdin, os.Stdout) }()
+
+	reason, serveErr := awaitShutdown(ctx, serveDone)
+
+	// Audit entry shutdown — satu Append atomik per entry (JSONL lengkap
+	// atau tidak sama sekali), baik keluar karena EOF maupun sinyal.
+	if err := writeAudit(*auditFile, "shutdown", map[string]any{
+		"mode":   "mcp",
+		"reason": reason,
+	}); err != nil {
+		return fmt.Errorf("serve: tulis audit shutdown: %w", err)
+	}
+	if reason == shutdownReasonSignal {
+		fmt.Fprintln(os.Stderr, "serve: shutdown (sinyal diterima) — audit entry ditulis.")
+		return nil
+	}
+	// Keluar normal: kembalikan error Serve (biasanya nil saat EOF).
+	return serveErr
+}
+
+// Alasan shutdown untuk entry audit.
+const (
+	shutdownReasonEOF    = "stdin_eof"
+	shutdownReasonSignal = "signal"
+)
+
+// awaitShutdown menunggu loop serve selesai sendiri (EOF stdin) atau
+// context shutdown dibatalkan (SIGINT/SIGTERM); mengembalikan alasan untuk
+// entry audit plus error loop serve (nil saat sinyal). Jalur context cancel
+// bisa diuji langsung tanpa proses/sinyal nyata.
+func awaitShutdown(ctx context.Context, serveDone <-chan error) (string, error) {
+	select {
+	case err := <-serveDone:
+		return shutdownReasonEOF, err
+	case <-ctx.Done():
+		return shutdownReasonSignal, nil
+	}
 }

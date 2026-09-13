@@ -37,8 +37,16 @@ hermes-proxy \
 | `--evidence-dir` | `./jobs/evidence` | Direktori evidence file (§25). |
 | `--max-body-bytes` | `0` (otomatis) | Context budget inline body; 0 = pakai `max_body_bytes` bundle atau 8192. Nilai flag hanya boleh memperketat, tidak boleh melampaui bundle. |
 | `--mitm` | `false` | Aktifkan Mode 2 (eksperimental). |
-| `--mitm-addr` | `127.0.0.1:8081` | Alamat listen CONNECT MITM. |
+| `--mitm-addr` | `127.0.0.1:8081` | Alamat listen MITM (CONNECT + absolute-form plain HTTP, lihat Mode 2). |
 | `--ca-out` | (kosong) | Ekspor sertifikat publik CA MITM ke file PEM (private key **tidak** pernah ditulis ke disk). |
+| `--target-ca` | (kosong) | Lab/testing: PEM CA tambahan untuk **verifikasi TLS terhadap target** (mis. target `python` + `ssl` self-signed). Kosong = system roots. Ini BUKAN mekanisme trust client terhadap CA MITM. |
+
+### Shutdown
+
+SIGINT/SIGTERM (Ctrl-C) memicu **graceful shutdown**: listener ditutup, request
+in-flight diberi waktu maksimal **5 detik** untuk selesai, lalu proses keluar
+dengan kode 0. Evidence selalu ditulis utuh sebelum response dikirim, sehingga
+tidak ada evidence setengah tertulis.
 
 ### Contract API — `POST /execute`
 
@@ -108,14 +116,61 @@ hermes-proxy --bundle "$BUNDLE" --bundle-sha256 "$SHA" \
 - Menangani `CONNECT`: hijack koneksi, balas `200 Connection Established`,
   lalu `tls.Server` dengan leaf certificate dinamis **per SNI** yang
   ditandatangani CA ephemeral.
+- Menangani juga request HTTP plaintext **absolute-form**
+  (`GET http://host:port/path HTTP/1.1`) pada listener yang sama — kontrak
+  HTTP proxy (RFC 9112 §3.2.2): browser yang dikonfigurasi memakai proxy
+  HTTP untuk target `http://` mengirim absolute-form, **bukan** CONNECT.
+  Request absolute-form tetap melewati jalur policy Engine yang sama
+  (scope, budget, rate limit, redaksi) dan tercatat sebagai evidence.
 - Request hasil intercept melewati **jalur policy yang sama** dengan Mode 1
   (scope, budget, rate limit, redaksi) dan tercatat sebagai evidence.
-- Client uji memasang CA tersebut sebagai root (custom `RootCAs`), bukan
-  browser. Untuk target TLS lokal, gunakan hostname (`localhost:port`) di
-  `allowed_hosts` — literal IP loopback selalu ditolak oleh scope.
+- Untuk target TLS lokal dengan sertifikat self-signed, gunakan
+  `--target-ca <file.pem>` agar proxy memverifikasi TLS target memakai CA
+  lab tersebut; gunakan hostname (`localhost:port`) di `allowed_hosts` —
+  literal IP loopback selalu ditolak oleh scope.
 - **PERINGATAN**: mode ini eksperimental. Intersepsi hanya sah untuk target
   yang diizinkan policy bundle. Stream antara client dan target diteruskan
   utuh; redaksi hanya berlaku pada evidence (capture), bukan pada passthrough.
+
+### Smoke test dengan browser asli (Chrome/Edge headless)
+
+Bukti ROADMAP §38 item 7.6 (browser → proxy) memakai browser engine asli,
+bukan client Go:
+
+```bash
+# target lokal (plain HTTP di 8000; TLS opsional via python ssl + --target-ca)
+python -m http.server 8000 --bind 127.0.0.1
+
+# proxy dengan MITM + ekspor CA
+BUNDLE=runtimes/proxy/policy-bundle/example-bundle.json
+SHA=$(sha256sum "$BUNDLE" | cut -d' ' -f1)
+hermes-proxy --bundle "$BUNDLE" --bundle-sha256 "$SHA" \
+  --addr 127.0.0.1:8080 --mitm --mitm-addr 127.0.0.1:8081 \
+  --ca-out ca.pem --evidence-dir ./jobs/evidence
+
+# Chrome headless lewat proxy MITM (profile temp, CA TIDAK dipasang)
+chrome.exe --headless=new --user-data-dir="$TEMP/chrome-profile" \
+  --proxy-server="http=127.0.0.1:8081;https=127.0.0.1:8081" \
+  --proxy-bypass-list="<-loopback>" \
+  --ignore-certificate-errors --disable-gpu --no-first-run \
+  --dump-dom "http://localhost:8000/"
+# https://localhost:8000/ untuk jalur CONNECT + TLS interception
+```
+
+Catatan penting:
+
+- `--proxy-bypass-list="<-loopback>"` **wajib** untuk target localhost:
+  Chrome/Edge secara implisit mem-bypass proxy untuk loopback; tanpa flag
+  ini request TIDAK lewat proxy (tidak ada evidence).
+- `--ignore-certificate-errors` **hanya untuk smoke test** — cara cepat
+  membuat browser memercayai leaf cert MITM tanpa memasang CA. Untuk
+  pemakaian nyata, pasang CA publik hasil `--ca-out` di cert store OS/browser
+  (atau policy browser via group policy), JANGAN pernah mematikan verifikasi
+  sertifikat.
+- Verifikasi capture: file evidence di `--evidence-dir` berisi request
+  browser (User-Agent `HeadlessChrome/...` atau `Chrome/...` terlihat), dan
+  output `--dump-dom` berisi konten halaman target — bukti MITM capture
+  end-to-end.
 
 ## Contoh uji lokal (Mode 1)
 

@@ -34,6 +34,41 @@ Dua prinsip ini bersifat mutlak dan menjadi dasar seluruh desain:
 1. **Skill tidak mengetahui tool.** Skill hanya meminta *capability* abstrak (mis. `request_replay`), tidak pernah hardcode tool (`mitmproxy`, `curl`, Docker). Provider ditentukan oleh capability registry.
 2. **Policy decides — and enforces.** Policy dieksekusi di tool path, bukan diberikan sebagai saran. Satu-satunya jalur ke provider adalah melalui control plane.
 
+## Quickstart
+
+Prasyarat: **Go 1.22+** (stdlib only), **Python 3** (skill-linter dan target uji lokal), **Docker** (opsional — validator image dan offline lab), **make** (opsional — di Windows sering tidak terpasang; pakai perintah langsung di bawah).
+
+```bash
+# 1. Build semua package Go (control plane, hermes-proxy, validator)
+go build ./...
+
+# 2. Jalankan semua test Go
+go test ./...
+
+# 3. Validasi skills/ dengan skill-linter
+python tools/skill-linter/lint.py skills/
+
+# 4. Build satu validator image (build context = root repo)
+docker build -f runtimes/docker/images/http-validator/Dockerfile \
+  -t hermes/http-validator:dev .
+```
+
+Empat perintah di atas setara dengan target Makefile `go-build`, `go-test`,
+`lint-skills`, dan `docker-build`. Target lain: `go-vet` = `go vet ./...`,
+`lab-up`/`lab-down` = `docker compose -f labs/docker-compose.yml up -d|down`
+(hanya untuk offline lab, §8/§42).
+
+Coba hermes-proxy (replay engine) end-to-end — satu perintah, bisa
+dijalankan ulang, otomatis shutdown + cleanup:
+
+```bash
+bash scripts/demo-e2e.sh                                  # Git Bash / Linux / macOS
+powershell -ExecutionPolicy Bypass -File scripts\demo-e2e.ps1   # PowerShell
+```
+
+Langkah manual Mode 1 dan Mode 2 (TLS MITM) ada di
+[`cmd/hermes-proxy/README.md`](cmd/hermes-proxy/README.md).
+
 ## Ringkasan Arsitektur
 
 ```
