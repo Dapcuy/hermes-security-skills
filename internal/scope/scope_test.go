@@ -254,34 +254,45 @@ func TestAdversarialScopeIPObfuscation(t *testing.T) {
 	cases := []struct {
 		name string
 		url  string
-		// parserRejects: ditolak url.Parse (ErrInvalidURL), bukan deny IP.
+		// parserRejects: wajib ErrInvalidURL — url.Parse menolak literal ini
+		// di semua versi Go yang dipakai (lokal & CI).
 		parserRejects bool
+		// denyAny: cukup ditolak dengan error APAPUN — properti keamanannya
+		// adalah denial; jenis error boleh berbeda antar versi Go karena
+		// net/url berubah perilaku untuk beberapa literal IPv6 (mis.
+		// mapped-decimal ditolak parser di Go baru, diterima di Go lama).
+		denyAny bool
 	}{
-		{"desimal penuh 127.0.0.1", "http://2130706433/", false},
-		{"hex 127.0.0.1", "http://0x7f000001/", false},
-		{"hex uppercase 127.0.0.1", "http://0X7F000001/", false},
-		{"oktal 127.0.0.1", "http://017700000001/", false},
-		{"hex campur 0x7f.1", "http://0x7f.1/", false},
-		{"oktal campur 0177.0.0.1", "http://0177.0.0.1/", false},
-		{"bentuk pendek 127.1", "http://127.1/", false},
-		{"bentuk pendek 127.0.1", "http://127.0.1/", false},
-		{"desimal + trailing dot", "http://2130706433./", false},
-		{"desimal dengan port", "http://2130706433:80/", false},
-		{"desimal 192.168.0.11", "http://3232235531/", false},
-		{"IPv4-mapped IPv6 loopback", "http://[::ffff:127.0.0.1]/", false},
-		// Bentuk ini ditolak url.Parse sendiri (ErrInvalidURL) — tetap ditolak,
-		// tapi bukan lewat jalur deny IP.
-		{"IPv4-mapped IPv6 desimal (parser tolak)", "http://[::ffff:2130706433]/", true},
-		{"IPv6 loopback", "http://[::1]/", false},
-		{"IPv6 loopback dengan zone", "http://[::1%25eth0]/", false},
-		{"NAT64 well-known -> 127.0.0.1", "http://[64:ff9b::7f00:1]/", false},
-		{"NAT64 -> metadata 169.254.169.254", "http://[64:ff9b::a9fe:a9fe]/", false},
-		{"6to4 -> 10.0.0.1", "http://[2002:a00:1::]/", false},
+		{"desimal penuh 127.0.0.1", "http://2130706433/", false, false},
+		{"hex 127.0.0.1", "http://0x7f000001/", false, false},
+		{"hex uppercase 127.0.0.1", "http://0X7F000001/", false, false},
+		{"oktal 127.0.0.1", "http://017700000001/", false, false},
+		{"hex campur 0x7f.1", "http://0x7f.1/", false, false},
+		{"oktal campur 0177.0.0.1", "http://0177.0.0.1/", false, false},
+		{"bentuk pendek 127.1", "http://127.1/", false, false},
+		{"bentuk pendek 127.0.1", "http://127.0.1/", false, false},
+		{"desimal + trailing dot", "http://2130706433./", false, false},
+		{"desimal dengan port", "http://2130706433:80/", false, false},
+		{"desimal 192.168.0.11", "http://3232235531/", false, false},
+		{"IPv4-mapped IPv6 loopback", "http://[::ffff:127.0.0.1]/", false, false},
+		// Denial-nya dijamin di semua versi Go, tapi JENIS errornya beda:
+		// Go baru menolak literal ini di url.Parse (ErrInvalidURL), Go lama
+		// menerima lalu jatuh ke jalur host-not-allowed. Properti keamanan
+		// yang diuji: tidak pernah lolos.
+		{"IPv4-mapped IPv6 desimal", "http://[::ffff:2130706433]/", false, true},
+		{"IPv6 loopback", "http://[::1]/", false, false},
+		{"IPv6 loopback dengan zone", "http://[::1%25eth0]/", false, false},
+		{"NAT64 well-known -> 127.0.0.1", "http://[64:ff9b::7f00:1]/", false, false},
+		{"NAT64 -> metadata 169.254.169.254", "http://[64:ff9b::a9fe:a9fe]/", false, false},
+		{"6to4 -> 10.0.0.1", "http://[2002:a00:1::]/", false, false},
 	}
 	for _, tc := range cases {
 		err := c.Check(tc.url)
 		if err == nil {
 			t.Errorf("BYPASS: Check(%q) = nil — harus ditolak (%s)", tc.url, tc.name)
+			continue
+		}
+		if tc.denyAny {
 			continue
 		}
 		if tc.parserRejects {
