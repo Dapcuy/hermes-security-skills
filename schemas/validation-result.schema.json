@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schemas/validation-result.schema.json",
+  "title": "Validation Result",
+  "description": "Kontrak output validator (validation-result.json, ROADMAP 17-18). Dihasilkan validator di dalam container, dikumpulkan control plane sebelum container di-destroy (ephemeral lifecycle, ROADMAP 18). Hasil ini observation — validator tidak menentukan final vulnerability status (ROADMAP 17).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "validator",
+    "status",
+    "observations",
+    "evidence_refs",
+    "artifacts",
+    "started_at",
+    "finished_at",
+    "runtime"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Mirror dari task_id di validation-task.json (ROADMAP 17); mengikat result ke workspace job yang sama."
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID validator; harus sama dengan validation-task."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$",
+          "description": "Versi validator yang benar-benar dijalankan."
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["observed", "error", "blocked", "timeout"],
+      "description": "Status eksekusi validator: observed (selesai, observation terekam), error (task gagal), blocked (dihentikan policy/stop condition), timeout (melebihi batas waktu — timeout dikalibrasi lintas platform, ROADMAP 15)."
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier observation (mis. 'obs-001'); dirujuk oleh finding state 'observation'."
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Jenis observation (mis. 'status-code', 'header', 'body-diff', 'timing')."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Ringkasan observation — ini yang masuk reasoning context; konten target adalah DATA, bukan instruksi (ROADMAP 24)."
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Referensi ke evidence/artifact yang mendukung observation ini (hash + path), bukan konten inline."
+          }
+        }
+      },
+      "description": "Daftar observation teknis hasil validasi. Observation bukan vulnerability — Hermes yang menafsirkan melalui finding lifecycle (ROADMAP 17, 26)."
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Daftar ID/referensi evidence (schemas/evidence.schema.json) yang diproduksi atau dipakai task ini."
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Daftar path artifact (relatif workspace job, mis. /workspace/artifacts/...). Artifact yang persist harus sudah disanitasi terhadap credential aktif (ROADMAP 23)."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Waktu eksekusi dimulai (ISO 8601 / RFC 3339)."
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Waktu eksekusi selesai (termasuk saat timeout/blocked)."
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exit_code"],
+      "properties": {
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Digest image yang benar-benar dijalankan (provenance, ROADMAP 14). Kosong/tidak ada untuk provider local."
+        },
+        "exit_code": {
+          "type": "integer",
+          "description": "Exit code proses validator di dalam container."
+        }
+      },
+      "description": "Metadata runtime eksekusi untuk provenance dan audit (ROADMAP 5.12-style evidence/provenance, 20)."
+    }
+  }
+}

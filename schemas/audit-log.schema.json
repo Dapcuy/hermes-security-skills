@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schemas/audit-log.schema.json",
+  "title": "Audit Log Entry",
+  "description": "Satu entry pada audit log append-only dan tamper-evident (ROADMAP 25 Evidence Integrity, 35, 46). Entry dirantai dengan hash: entry_hash = SHA-256 dari konten entry kanonikal + prev_hash, sehingga perubahan/penghapusan entry manapun terdeteksi. Entry tidak pernah diedit atau dihapus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "ts", "actor", "action", "prev_hash", "entry_hash"],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Nomor urut monoton naik dalam satu audit log; tidak ada gap yang diizinkan."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Waktu kejadian (ISO 8601 / RFC 3339)."
+    },
+    "actor": {
+      "type": "string",
+      "enum": ["control_plane", "hermes", "user"],
+      "description": "Pihak yang memicu kejadian: control_plane (komponen trusted, ROADMAP 20), hermes (agent reasoning), user (manusia)."
+    },
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Kejadian yang dicatat (mis. 'plan.approved', 'approval.revoked', 'case.aborted', 'policy.changed', 'evidence.created')."
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Case engagement terkait, jika kejadian terikat case (mis. policy.changed bisa global tanpa case)."
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Referensi objek terkait: execution plan id, approval id, evidence id, path file policy yang berubah (termasuk untuk policy change audit: siapa/kapan/apa, ROADMAP 8)."
+    },
+    "prev_hash": {
+      "type": "string",
+      "pattern": "^([a-f0-9]{64})?$",
+      "description": "entry_hash dari entry sebelumnya; string kosong hanya untuk entry pertama (genesis)."
+    },
+    "entry_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 dari konten entry kanonikal yang digabung dengan prev_hash — membentuk hash chain tamper-evident (ROADMAP 25)."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "seq": { "const": 0 } },
+        "required": ["seq"]
+      },
+      "then": {
+        "properties": {
+          "prev_hash": { "maxLength": 0 }
+        },
+        "description": "Entry genesis (seq 0) tidak punya prev_hash (string kosong)."
+      },
+      "else": {
+        "properties": {
+          "prev_hash": { "pattern": "^[a-f0-9]{64}$" }
+        },
+        "description": "Entry non-genesis wajib merujuk entry_hash entry sebelumnya — tanpa gap."
+      }
+    }
+  ]
+}

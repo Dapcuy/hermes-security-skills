@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "allowed_hosts": ["api.example.com:443", "localhost:8000"],
+  "max_requests": 50,
+  "rate_limit_rps": 1,
+  "follow_redirects": false,
+  "timeout_seconds": 15,
+  "max_body_bytes": 8192
+}

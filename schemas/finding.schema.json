@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schemas/finding.schema.json",
+  "title": "Finding",
+  "description": "Finding dengan lifecycle (ROADMAP 26) dan novelty classification (ROADMAP 28). Finding tidak boleh 'confirmed' hanya berdasarkan satu indikasi — minimum evidence: baseline, reproduction steps, expected/actual behavior, impact, false-positive analysis, scope reference, confidence, sanitized artifact (ROADMAP 25). Payload success != vulnerability confirmation (ROADMAP 22).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "state", "hypothesis", "novelty_classification"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier unik finding (mis. 'find-001')."
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "observation",
+        "hypothesis",
+        "suspected",
+        "needs-validation",
+        "reproduced",
+        "confirmed",
+        "duplicate",
+        "rejected",
+        "inconclusive"
+      ],
+      "description": "Lifecycle finding (ROADMAP 26): observation -> hypothesis -> suspected -> needs-validation -> reproduced -> confirmed; alternative: duplicate, rejected, inconclusive."
+    },
+    "hypothesis": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hypothesis keamanan yang diuji (dibuat Hermes, ROADMAP 1, 26)."
+    },
+    "baseline_evidence_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Referensi ID evidence baseline (kondisi normal) — minimum evidence untuk finding (ROADMAP 25, schemas/evidence.schema.json)."
+    },
+    "reproduction_steps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Langkah reproduksi secara berurutan; wajib untuk finding confirmed (ROADMAP 25, 46)."
+    },
+    "expected_behavior": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Perilaku yang seharusnya terjadi."
+    },
+    "actual_behavior": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Perilaku yang teramati."
+    },
+    "impact": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Dampak jika vulnerability valid."
+    },
+    "false_positive_analysis": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Analisis false positive — wajib untuk setiap finding (ROADMAP 46)."
+    },
+    "scope_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Referensi ke scope/authorization engagement yang mengizinkan pengujian ini (ROADMAP 8, 25)."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence dalam rentang 0-1."
+    },
+    "sanitized_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Daftar path artifact yang SUDAH disanitasi terhadap credential aktif sebelum dipersist (ROADMAP 23, 25)."
+    },
+    "novelty_classification": {
+      "type": "string",
+      "enum": [
+        "known-common-pattern",
+        "target-specific-instance",
+        "novel-variant",
+        "potentially-unknown",
+        "under-review",
+        "vendor-notified",
+        "confirmed-by-vendor",
+        "publicly-disclosed"
+      ],
+      "description": "Klasifikasi novelty (ROADMAP 28). Project tidak boleh otomatis menyatakan zero-day: potentially novel high-impact -> stop active testing, simpan evidence minimum, redact, mark potentially-unknown, inform user, human decides."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "state": { "const": "confirmed" } },
+        "required": ["state"]
+      },
+      "then": {
+        "required": [
+          "baseline_evidence_ref",
+          "reproduction_steps",
+          "expected_behavior",
+          "actual_behavior",
+          "impact",
+          "false_positive_analysis",
+          "scope_ref",
+          "confidence",
+          "sanitized_artifacts"
+        ],
+        "properties": {
+          "reproduction_steps": { "minItems": 1 },
+          "sanitized_artifacts": { "minItems": 1 }
+        },
+        "description": "Finding 'confirmed' wajib memenuhi minimum evidence ROADMAP 25: baseline + reproduction + expected/actual behavior + impact + false-positive analysis + scope reference + confidence + sanitized artifact."
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          { "properties": { "state": { "const": "duplicate" } }, "required": ["state"] },
+          { "properties": { "state": { "const": "rejected" } }, "required": ["state"] },
+          { "properties": { "state": { "const": "inconclusive" } }, "required": ["state"] }
+        ]
+      },
+      "then": {
+        "required": ["false_positive_analysis"],
+        "description": "Finding duplicate/rejected/inconclusive wajib menjelaskan alasannya melalui false_positive_analysis (ROADMAP 26)."
+      }
+    }
+  ]
+}

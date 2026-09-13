@@ -1,0 +1,60 @@
+# Capability registry — Hermes Security Skills
+# Sumber kebenaran untuk capability abstraction (ROADMAP 5).
+# Skill meminta capability, BUKAN tool; provider ditentukan di sini (ROADMAP 4.1).
+#
+# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP 4.3, 4.4).
+# Format: YAML subset sederhana (map / seq / string / int / bool) —
+# tanpa anchor, tanpa multiline-flow, tanpa fitur kompleks.
+# Lihat capabilities/schemas/README.md untuk field yang valid.
+
+version: 1
+
+# Fallback semantics (ROADMAP 5.1) — fail-closed:
+#   1. Provider utama UNAVAILABLE = capability GAGAL dengan error
+#      eksplisit. TIDAK ada silent degrade, TIDAK ada fallback otomatis.
+#   2. Policy denial = stop, bukan fallback.
+#   3. Provider yang tidak memenuhi syarat capability (mis. butuh
+#      network tapi berjalan network=none) WAJIB menolak eksplisit.
+#   4. Operasi read-only (history/inspect) boleh dilayani provider
+#      lain karena tidak mengirim traffic ke target.
+fallback_semantics: fail-closed
+
+capabilities:
+
+  inspect_request:
+    risk: low
+    default_provider: proxy
+    requires_scope: true
+    requires_network: false
+
+  request_replay:
+    risk: medium
+    default_provider: proxy
+    requires_scope: true
+    requires_network: true
+    requires_approval: conditional
+
+  response_comparison:
+    risk: low
+    default_provider: proxy
+    requires_scope: true
+    requires_network: false
+
+  list_history:
+    risk: low
+    default_provider: proxy
+    requires_scope: false
+    requires_network: false
+
+  json_diff:
+    risk: low
+    default_provider: local
+    requires_scope: false
+    requires_network: false
+
+  openapi_analysis:
+    risk: low
+    default_provider: docker
+    requires_scope: false
+    requires_network: false
+    image: hermes-validator-openapi

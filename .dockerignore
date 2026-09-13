@@ -1,0 +1,67 @@
+# =============================================================================
+# .dockerignore — build context image Docker tetap bersih dan minimal
+# (ROADMAP §13, §15, §18, §23).
+#
+# Build context WAJIB = root repo (Makefile: docker build -f
+# runtimes/docker/images/<name>/Dockerfile -t hermes/<name>:dev .) — semua
+# Dockerfile validator/proxy menyalin go.* + source Go dari root.
+#
+# Prinsip:
+#   - Yang dibutuhkan build: cmd/, internal/, validators/, runtimes/,
+#     go.mod, go.sum — semuanya TETAP masuk context.
+#   - Data engagement (jobs/, audit/, memory/) TIDAK PERNAH boleh masuk
+#     build context — walau hanya sebagai layer cache, data target bisa
+#     terbawa ke image (§18: container bukan persistent memory).
+#   - Kredensial/secret (token/, credentials/) di-exclude sebagai defense
+#     in-depth (§23: credential tidak pernah masuk repo maupun image).
+# =============================================================================
+
+# ---- VCS ----
+.git
+.gitignore
+.gitattributes
+
+# ---- Data engagement & runtime state (§18, §25) ----
+jobs/
+audit/
+memory/
+knowledge/
+evidence/
+logs/
+*.log
+
+# ---- Kredensial & token (§23 — defense in-depth) ----
+token/
+tokens/
+credentials/
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+
+# ---- Konten non-build (skill/docs/lab/test) ----
+skills/
+docs/
+labs/
+tests/
+.github/
+templates/
+references/
+
+# ---- Artefak build lokal & OS ----
+*.exe
+*.exe~
+*.test
+*.out
+bin/
+__pycache__/
+node_modules/
+*.db
+*.sqlite
+*.sqlite3
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hermes-security": {
+      "command": "hermes-security",
+      "args": ["serve", "--mcp"],
+      "env": {
+        "HERMES_ENGAGEMENT": "offline-lab"
+      }
+    }
+  }
+}

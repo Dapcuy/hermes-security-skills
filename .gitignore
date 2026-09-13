@@ -1,0 +1,89 @@
+# ---- Go ----
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+bin/
+cmd/hermes-security/hermes-security
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Case & job data (data engagement, tidak pernah masuk repo) ----
+memory/cases/
+memory/global/
+jobs/
+jobs/*.json
+logs/
+*.log
+
+# ---- Benchmark results (hasil run, dihasilkan ulang tiap eksekusi §42) ----
+benchmarks/results/
+
+# ---- Database lokal (memory/knowledge pipeline) ----
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# ---- Token & credential (WAJIB di-ignore; credential store resmi ada di luar repo, lihat ROADMAP §23) ----
+token/
+tokens/
+*.token
+credentials/
+credentials.*
+*.credentials.json
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt.bak
+id_rsa*
+.env
+.env.*
+!.env.example
+
+# ---- Evidence mentah & artifact container ----
+evidence/raw/
+artifacts/
+*.tar
+*.tgz
+
+# ---- Container & registry tooling ----
+*.sbom.json
+cosign.pub
+cosign.key
+sbom/
+trivy-report*.json
+
+# ---- Editor / OS ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# audit log (runtime, append-only — jangan pernah di-commit)
+audit/

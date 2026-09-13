@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schemas/execution-plan.schema.json",
+  "title": "Execution Plan",
+  "description": "Execution plan yang disetujui policy sebelum dieksekusi (ROADMAP 3, 8, 14). Control plane yang memproduksi plan ini setelah authorization, scope, risk, approval, dan limits lolos; provider hanya mengeksekusi plan yang valid. Policy bundle di-mount read-only dan diverifikasi hash (fail-closed, ROADMAP 11).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "case_id",
+    "created_at",
+    "expires_at",
+    "capability",
+    "provider",
+    "target",
+    "constraints",
+    "approval_ref",
+    "network_mode",
+    "policy_bundle_hash"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier unik execution plan (mis. 'plan-001')."
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Case engagement yang terkait; dipakai untuk audit log, abort, dan retention (ROADMAP 10, 25)."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Waktu plan dibuat (ISO 8601 / RFC 3339)."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Waktu kadaluarsa plan. Plan kadaluarsa tidak boleh dieksekusi; renewal = plan baru tanpa silent extension (ROADMAP 9, 10)."
+    },
+    "capability": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ID capability yang diminta skill; harus terdaftar di capabilities/registry.yaml (ROADMAP 5)."
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["proxy", "docker", "local"],
+      "description": "Provider eksekusi sesuai registry (ROADMAP 5.1-5.3): proxy = hermes-proxy container (satu-satunya egress), docker = validator network=none, local = komputasi murni in-process. Tidak ada fallback otomatis antar provider — provider unavailable = gagal eksplisit (fail-closed)."
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port", "scheme"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "description": "Hostname target, exact-match terhadap scope — bukan substring (ROADMAP 8)."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port target; harus eksplisit dan tervalidasi terhadap scope (ROADMAP 8)."
+        },
+        "scheme": {
+          "type": "string",
+          "enum": ["http", "https"],
+          "description": "Skema transport target."
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "path", "max_requests", "rate_limit_rps"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "pattern": "^[A-Z]+$",
+          "description": "HTTP method yang diizinkan (mis. GET). Method HIGH seperti POST/PUT/PATCH/DELETE butuh approval (ROADMAP 8)."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Path yang diizinkan, diawali '/'. Approval scoped ke path spesifik, bukan global (ROADMAP 9)."
+        },
+        "max_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Budget request untuk plan ini. Tidak boleh melebihi max_requests_total di policy/limits.yaml (ROADMAP 22); budget habis = stop."
+        },
+        "rate_limit_rps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Batas rate dalam request per detik. Default guardrail project: 1 rps (ROADMAP 22); angka di atas itu butuh justification dan tetap tunduk pada policy."
+        }
+      }
+    },
+    "approval_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Referensi ke approval object yang scoped (ROADMAP 9) — referensi, bukan salinan approval. Approval dicabut/kadaluarsa = plan berhenti (ROADMAP 10)."
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nama image terkurasi (mis. 'hermes-validator-http', 'hermes-proxy'). Satu tujuan sempit per image (ROADMAP 13)."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$",
+          "description": "Versi image ter-pin (immutable versioning, ROADMAP 14)."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Digest image (format 'name@sha256:...'). Direkomendasikan untuk reproducibility dan auditability (ROADMAP 14); mismatch digest = reject."
+        }
+      },
+      "description": "Image container untuk provider docker/proxy; tidak relevan untuk provider local."
+    },
+    "network_mode": {
+      "type": "string",
+      "enum": ["none", "egress-via-proxy"],
+      "description": "none = validator tanpa jaringan sama sekali (MVP, ROADMAP 16); egress-via-proxy = semua traffic keluar di-route melalui hermes-proxy (satu-satunya komponen dengan privilege egress). network_mode: host TIDAK PERNAH diizinkan."
+    },
+    "policy_bundle_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 dari policy bundle yang di-mount read-only ke proxy/tool wrapper. Hash mismatch / bundle tidak valid = tolak semua operasi (fail-closed, ROADMAP 11, 38)."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "provider": { "enum": ["docker", "proxy"] } },
+        "required": ["provider"]
+      },
+      "then": {
+        "required": ["image"],
+        "description": "Provider docker/proxy wajib menyimpan image name + version (ROADMAP 14)."
+      }
+    },
+    {
+      "if": {
+        "properties": { "provider": { "const": "local" } },
+        "required": ["provider"]
+      },
+      "then": {
+        "properties": {
+          "network_mode": { "const": "none" },
+          "image": { "maxProperties": 0 }
+        },
+        "description": "Provider local adalah komputasi murni tanpa network dan tanpa image (ROADMAP 5.3)."
+      }
+    }
+  ]
+}

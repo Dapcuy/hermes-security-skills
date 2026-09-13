@@ -1,0 +1,62 @@
+# Template scoped approval — Hermes Security Skills
+# Sumber: ROADMAP 9 (Scoped Approval).
+#
+# Approval TIDAK boleh bersifat global. Setiap approval terikat minimal pada:
+#   - capability
+#   - target (host)
+#   - method
+#   - path
+#   - account/context (jika relevan)
+#   - request budget
+#   - expiration
+#   - risk level
+#
+# Field "account" adalah CREDENTIAL REFERENCE, bukan nilai kredensial
+# (lihat schemas/credential-reference.schema.json, ROADMAP 23). Nilai
+# kredensial tidak pernah masuk konteks reasoning.
+#
+# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP 4.4).
+
+version: 1
+
+# Contoh approval scoped (nilai adalah contoh, bukan aktif):
+approval:
+  capability: request_replay
+  host: api.example.com
+  method: GET
+  path: /api/orders/123
+  maximum_requests: 1
+  account: test-account-b
+  expires_in: 10m
+  risk: medium
+  case_id: case-000
+
+# Field:
+#   capability       : ID capability sesuai capabilities/registry.yaml
+#   host             : target host — exact-match terhadap scope (ROADMAP 8)
+#   method           : HTTP method tunggal yang diizinkan
+#   path             : path spesifik yang diizinkan, diawali "/"
+#   maximum_requests : request budget — tidak boleh melebihi
+#                      max_requests_total di policy/limits.yaml (ROADMAP 22)
+#   account          : credential reference (BUKAN nilai), hanya jika
+#                      capability butuh test account
+#   expires_in       : durasi berlaku (mis. 10m) — approval kadaluarsa
+#                      HARUS dibuat ulang, tidak ada silent extension
+#   risk             : risk class operasi (ROADMAP 8) — harus konsisten
+#                      dengan classification capability/operasi
+#   case_id          : case engagement — dipakai abort untuk mencabut
+#                      SEMUA approval aktif pada case tersebut (ROADMAP 10)
+#
+# Revocation (ROADMAP 9):
+#   - approval dapat dicabut kapan saja sebelum expiry
+#   - pencabutan langsung menghentikan queue dan execution plan
+#     yang bergantung padanya
+#
+# Renewal (ROADMAP 9):
+#   - approval yang kadaluarsa HARUS dibuat ulang sebagai approval baru
+#   - tidak ada silent extension — setiap renewal meninggalkan
+#     audit trail terpisah
+#
+# Stop conditions yang otomatis menghentikan eksekusi meski approval
+# masih aktif — lihat ROADMAP 10 (out-of-scope, rate limit, repeated 5xx,
+# redirect out-of-scope, budget habis, policy berubah jadi deny, dsb.).

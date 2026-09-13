@@ -1,0 +1,66 @@
+# Scope validation defaults — Hermes Security Skills
+# Sumber: ROADMAP 8 (Policy Layer — Scope).
+# Scope harus memvalidasi: hostname, port, redirect, DNS resolution,
+# private IP, third-party destination, cloud metadata endpoint,
+# out-of-scope host.
+# Gunakan hostname/parser yang benar, BUKAN substring matching.
+# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP 4.4);
+# perubahan tercatat di audit log (ROADMAP 8 Policy Integrity).
+
+version: 1
+
+# Hostname: exact-match terhadap scope — bukan substring.
+# "api.example.com" di scope TIDAK mengizinkan "evil-api.example.com"
+# maupun "api.example.com.attacker.tld".
+hostname:
+  match_mode: exact
+  allow_substring: false
+
+# Port: harus eksplisit di scope; port di luar daftar = out-of-scope.
+port:
+  enforce: true
+
+# Redirect: default NO-FOLLOW (ROADMAP 11 Hard Requirements).
+# Jika capability memerlukan follow, SETIAP redirect di-re-validate
+# terhadap scope sebelum diikuti; redirect out-of-scope = stop + evidence.
+redirect:
+  default: no-follow
+  revalidate_on_follow: true
+
+# DNS resolution: resolve sebelum request; IP hasil resolve divalidasi
+# ulang terhadap scope (anti DNS rebinding / pin-to-scope).
+dns_resolution:
+  validate_before_request: true
+
+# Private IP: DILARANG sebagai tujuan (anti SSRF ke internal network).
+# Mencakup RFC1918 (10/8, 172.16/12, 192.168/16), loopback, link-local,
+# dan unique local address IPv6.
+private_ip:
+  deny: true
+  cidr_blocks:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
+    - 169.254.0.0/16
+    - ::1/128
+    - fc00::/7
+
+# Cloud metadata endpoint: DILARANG eksplisit (anti SSRF ke metadata
+# cloud provider — 169.254.169.254 beserta varian umumnya).
+cloud_metadata:
+  deny: true
+  endpoints:
+    - 169.254.169.254
+    - metadata.google.internal
+
+# Out-of-scope host: DILARANG — termasuk origin hasil redirect dan
+# third-party destination. Respons origin out-of-scope tidak boleh masuk
+# reasoning sebagai konten; hanya sebagai evidence "redirect blocked".
+out_of_scope_host:
+  deny: true
+
+# Third-party destination: DILARANG — hanya target yang terdaftar di
+# scope engagement yang boleh dihubungi.
+third_party_destination:
+  deny: true

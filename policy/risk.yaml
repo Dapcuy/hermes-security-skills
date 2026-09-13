@@ -1,0 +1,55 @@
+# Risk classification default — Hermes Security Skills
+# Sumber: ROADMAP 8 (Policy Layer — Risk).
+# Risk class menentukan default action sebelum capability dieksekusi.
+# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP 4.4);
+# perubahan tercatat di audit log (ROADMAP 8 Policy Integrity).
+
+version: 1
+
+# Default action per risk class:
+#   automatic         -> boleh jalan tanpa approval
+#   conditional       -> jalan hanya jika kondisi approval terpenuhi
+#                        (scoped approval, budget, stop conditions aktif)
+#   approval_required -> butuh scoped approval eksplisit dari user
+#   disabled          -> tidak pernah dieksekusi lewat control plane
+default_action:
+  low: automatic
+  medium: conditional
+  high: approval_required
+  critical: disabled
+
+# Daftar contoh operasi per class — classifier memetakan operasi ke class
+# di sini; contoh bukan daftar tertutup, operasi ambigu diperlakukan
+# conservative (ambil class lebih tinggi).
+classes:
+
+  low:
+    action: automatic
+    examples:
+      - passive analysis
+      - metadata GET
+      - source review
+      - local analysis
+
+  medium:
+    action: conditional
+    examples:
+      - limited replay
+      - response comparison
+      - safe mutation
+
+  high:
+    action: approval_required
+    examples:
+      - POST/PUT/PATCH/DELETE
+      - upload
+      - concurrency
+      - transaction testing
+
+  critical:
+    action: disabled
+    examples:
+      - credential attack
+      - exfiltration
+      - persistence
+      - lateral movement

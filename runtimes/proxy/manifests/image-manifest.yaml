@@ -1,0 +1,66 @@
+# =============================================================================
+# image-manifest.yaml — daftar image project (ROADMAP §13, §13.1, §14, §37)
+#
+# Registry target: ghcr.io/<owner> — <owner> diisi nama user/organisasi
+# GitHub saat publish (workflow images.yml otomatis memakai
+# github.repository_owner).
+#
+# Kolom digest diisi "-" pada source dan DIGANTI OLEH CI saat publish:
+# workflow images.yml menulis digest OCI (sha256:...) dari build, sehingga
+# execution plan bisa memakai digest pinning (§14):
+#     image: hermes-validator-http@sha256:...
+# Jangan pernah mengedit digest secara manual.
+# =============================================================================
+
+registry: ghcr.io/<owner>
+
+images:
+  - name: hermes-validator-http
+    tag: 0.1.0
+    dockerfile: runtimes/docker/images/http-validator/Dockerfile
+    base: gcr.io/distroless/static-debian12:nonroot
+    network: none          # §16 — ditegakkan runtime adapter
+    egress: false
+    digest: "-"            # diisi oleh CI saat publish (§14)
+
+  - name: hermes-validator-json
+    tag: 0.1.0
+    dockerfile: runtimes/docker/images/json-validator/Dockerfile
+    base: gcr.io/distroless/static-debian12:nonroot
+    network: none          # §16 — ditegakkan runtime adapter
+    egress: false
+    digest: "-"            # diisi oleh CI saat publish (§14)
+
+  - name: hermes-validator-openapi
+    tag: 0.1.0
+    dockerfile: runtimes/docker/images/openapi-validator/Dockerfile
+    base: gcr.io/distroless/static-debian12:nonroot
+    network: none          # §16 — ditegakkan runtime adapter
+    egress: false
+    digest: "-"            # diisi oleh CI saat publish (§14)
+
+  - name: hermes-validator-python
+    tag: 0.1.0
+    dockerfile: runtimes/docker/images/python-validator/Dockerfile
+    base: python:3.12-slim
+    network: none          # §16 — ditegakkan runtime adapter
+    egress: false
+    digest: "-"            # diisi oleh CI saat publish (§14)
+
+  - name: hermes-proxy
+    tag: 0.1.0
+    dockerfile: runtimes/docker/images/proxy/Dockerfile
+    base: gcr.io/distroless/static-debian12:nonroot
+    network: internal + egress   # §11 — SATU-SATUNYA komponen dengan egress
+    egress: true
+    digest: "-"            # diisi oleh CI saat publish (§14)
+
+  - name: hermes-tool-nuclei
+    tag: 0.1.0
+    dockerfile: runtimes/docker/images/tool-nuclei/Dockerfile
+    base: gcr.io/distroless/static-debian12:nonroot
+    tool: nuclei
+    tool_version: v3.3.9   # ter-pin (§13.1) — ganti bersama wrapper provenance
+    network: none          # wrapper fail-closed; egress target-only post-MVP via proxy
+    egress: false
+    digest: "-"            # diisi oleh CI saat publish (§14)

@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schemas/validation-task.schema.json",
+  "title": "Validation Task",
+  "description": "Kontrak input untuk Docker validator (validation-task.json, ROADMAP 17). Validator menerima task ini, menganalisis input yang SUDAH ADA (hasil replay dari hermes-proxy atau data user — validator network=none tidak melakukan fetch), dan menghasilkan validation-result.json. Validator hanya menghasilkan observation; interpretasi vulnerability ada di Hermes (ROADMAP 17).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task_id", "validator", "input", "result", "evidence"],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier task (mis. 'val-001'); juga menjadi nama workspace job (jobs/<task_id>/, ROADMAP 18) dan di-mirror di validation-result."
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID validator sesuai validator registry (mis. 'http-response-comparison', ROADMAP 21)."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$",
+          "description": "Versi validator (semver), untuk provenance dan reproducibility."
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "description": "Input untuk validator: hasil replay/capture dari hermes-proxy, data user, atau referensi evidence. Validator network=none HANYA menganalisis data yang sudah ada — tidak ada fetch jaringan (ROADMAP 16, 17)."
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["observation", "error", "blocked"],
+          "description": "Kontrak hasil validator: 'observation' (temuan teknis — BUKAN keputusan vulnerability), 'error' (task gagal dijalankan), 'blocked' (dihentikan policy/stop condition). Status 'vulnerable' dari tool adalah observation, bukan conclusion (ROADMAP 13.1, 17, 22)."
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "ID evidence yang dirujuk (schemas/evidence.schema.json)."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path relatif file evidence di workspace job."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 file evidence untuk verifikasi integritas saat dipakai validator."
+          }
+        }
+      },
+      "description": "Array referensi evidence yang menjadi input task — referensi (id/path/hash), bukan konten inline (ROADMAP 17, 24, 25)."
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "tool_version"],
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nama tool pihak ketiga di dalam curated tool image (mis. 'nuclei', ROADMAP 13.1)."
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Versi tool yang ter-pin saat build CI (mis. 'v3.3.9')."
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID template/aset tool yang ter-pin (mis. template nuclei). Template adalah supply chain vector — di-pin per versi/commit, tidak pernah auto-update saat runtime (ROADMAP 13.1)."
+        }
+      },
+      "description": "Opsional; wajib untuk tool pihak ketiga (tool image, ROADMAP 13.1). Output tool tanpa provenance = finding ilegal yang membypass finding lifecycle."
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_requests",
+        "rate_limit_rps",
+        "stop_on_429",
+        "stop_on_repeated_5xx"
+      ],
+      "properties": {
+        "max_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Budget request maksimum untuk task; tidak boleh melebihi policy/limits.yaml (ROADMAP 22)."
+        },
+        "rate_limit_rps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Batas rate (request per detik); default guardrail 1 rps (ROADMAP 22)."
+        },
+        "stop_on_429": {
+          "type": "boolean",
+          "description": "Stop condition: berhenti saat rate limit terdeteksi (429) — default policy true (ROADMAP 10, 22)."
+        },
+        "stop_on_repeated_5xx": {
+          "type": "boolean",
+          "description": "Stop condition: berhenti saat repeated 5xx — default policy true (ROADMAP 10, 22)."
+        }
+      },
+      "description": "Opsional; budget dan stop conditions untuk task aktif. Diambil dari policy/limits.yaml dan execution plan, diturunkan ke validator/tool wrapper (ROADMAP 13.1, 22)."
+    }
+  }
+}

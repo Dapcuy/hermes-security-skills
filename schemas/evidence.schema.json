@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schemas/evidence.schema.json",
+  "title": "Evidence",
+  "description": "Evidence terstruktur dengan provenance dan tamper-evidence (ROADMAP 25). Setiap evidence di-hash (sha256) SAAT DIBUAT; sanitasi kredensial terjadi SEBELUM persist (ROADMAP 23, 25). Evidence menyediakan proof — Hermes menilai apakah evidence mendukung finding (ROADMAP 47).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "sha256", "source", "captured_at", "redacted"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier unik evidence; dirujuk oleh validation-task/result dan finding."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["baseline", "reproduction", "http_transaction", "observation"],
+      "description": "baseline = kondisi normal sebelum interaksi; reproduction = hasil langkah reproduksi; http_transaction = request/response terekam via hermes-proxy; observation = catatan hasil analisis. Finding confirmed butuh minimal baseline + reproduction (ROADMAP 25)."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 dari konten evidence (bentuk kanonikal) yang dihitung saat evidence dibuat. Hash ini + audit log chain hash membuat tampering terdeteksi (ROADMAP 25 Evidence Integrity)."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["proxy", "docker", "local", "user"],
+          "description": "Provider yang menghasilkan evidence: proxy (hermes-proxy), docker (validator), local (analisis in-process), user (data yang diberikan user)."
+        },
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Digest image container yang menghasilkan evidence, jika berasal dari container (provenance, ROADMAP 14)."
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nama tool pihak ketiga jika evidence berasal dari tool image (ROADMAP 13.1)."
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Versi tool + template/aset yang ter-pin — determinism tool pihak ketiga turun kelas, provenance wajib (ROADMAP 13.1)."
+        }
+      },
+      "description": "Provenance: dari mana evidence berasal. Provenance wajib agar evidence dapat diaudit (ROADMAP 25, 46)."
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Waktu evidence diambil/dibuat (ISO 8601 / RFC 3339)."
+    },
+    "redacted": {
+      "type": "boolean",
+      "description": "true jika evidence sudah melewati redaksi credential/data sensitif. Sanitasi WAJIB terjadi sebelum persist dan sebelum data menyentuh reasoning context (ROADMAP 23, 25)."
+    },
+    "redaction_rules_applied": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Daftar ID rule redaksi yang diterapkan (mis. header Authorization/Cookie/API key, ROADMAP 38)."
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Path file evidence yang sudah dipersist (di luar konteks reasoning). Full body tidak inline di konteks — disimpan sebagai evidence reference (hash + path), ROADMAP 24, 25."
+    },
+    "note": {
+      "type": "string",
+      "description": "Catatan bebas (mis. konteks pengambilan). Tidak boleh berisi credential atau payload mentah yang belum disanitasi."
+    }
+  }
+}

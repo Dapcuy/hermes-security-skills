@@ -1,0 +1,10 @@
+# Scope rules benchmark lab — Hermes Security Skills
+# Dipakai `hermes-security benchmark run` pada mode policy-only (§42).
+# HANYA host lab lokal yang di-allowlist; semua host/IP lain otomatis
+# ditolak oleh internal/scope (private IP, metadata, host asing).
+#
+# CATATAN (§8): file ini untuk authorization status "offline-lab" —
+# menggunakannya terhadap target nyata adalah pelanggaran policy keras.
+
+allowed_hosts:
+  - localhost:3000

@@ -1,0 +1,40 @@
+# Payload policy default — Hermes Security Skills
+# Sumber: ROADMAP 22 (Payload dan SecLists — default guardrail).
+# Nilai di sini adalah ceiling default: execution plan dan validation task
+# tidak boleh melebihi angka ini. Angka di atas default butuh perubahan
+# policy — dan perubahan policy ter-audit (ROADMAP 8 Policy Integrity).
+# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP 4.4).
+
+version: 1
+
+payload_policy:
+  # Maksimum entry payload per task.
+  max_entries_per_task: 100
+
+  # Maksimum total request per task; budget habis = stop (ROADMAP 10).
+  max_requests_total: 50
+
+  # Batas rate dalam request per detik.
+  rate_limit_rps: 1
+
+  # Concurrency maksimum — tidak ada parallel burst terhadap target.
+  max_concurrency: 1
+
+  # Stop condition: berhenti saat rate limit terdeteksi (429).
+  stop_on_429: true
+
+  # Stop condition: berhenti saat repeated 5xx (indikasi beban di target).
+  stop_on_repeated_5xx: true
+
+  # Payload destruktif DILARANG (ROADMAP 2 Non-Goals: destructive testing).
+  destructive_payloads: deny
+
+  # Payload exfiltration DILARANG (ROADMAP 2 Non-Goals: data exfiltration).
+  exfiltration_payloads: deny
+
+  # Credential attack lists DILARANG (ROADMAP 2 Non-Goals: credential stuffing).
+  credential_attack_lists: deny
+
+# Prinsip (ROADMAP 22):
+#   Payload success != vulnerability confirmation.
+#   WAF bypass != vulnerability.

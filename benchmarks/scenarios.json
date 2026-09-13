@@ -1,0 +1,68 @@
+[
+  {
+    "id": "bench-get-in-scope",
+    "name": "GET in-scope lab host",
+    "target_url": "http://localhost:3000/",
+    "capability": "request_replay",
+    "method": "GET",
+    "expected": { "scope_allowed": true, "risk": "low" }
+  },
+  {
+    "id": "bench-out-of-scope-host",
+    "name": "Out-of-scope host harus denied",
+    "target_url": "http://evil.example.test/",
+    "capability": "request_replay",
+    "method": "GET",
+    "expected": { "scope_allowed": false, "risk": "low", "reason": "scope" }
+  },
+  {
+    "id": "bench-private-ip",
+    "name": "Private IP harus denied",
+    "target_url": "http://10.0.0.99/admin",
+    "capability": "request_replay",
+    "method": "GET",
+    "expected": { "scope_allowed": false, "risk": "low", "reason": "scope" }
+  },
+  {
+    "id": "bench-metadata-endpoint",
+    "name": "Cloud metadata endpoint harus denied",
+    "target_url": "http://169.254.169.254/latest/meta-data/",
+    "capability": "request_replay",
+    "method": "GET",
+    "expected": { "scope_allowed": false, "risk": "low", "reason": "scope" }
+  },
+  {
+    "id": "bench-post-without-approval",
+    "name": "POST tanpa approval harus approval_required",
+    "target_url": "http://localhost:3000/api/Users",
+    "capability": "request_replay",
+    "method": "POST",
+    "expected": { "scope_allowed": true, "risk": "high", "reason": "approval" }
+  },
+  {
+    "id": "bench-get-passive",
+    "name": "GET pasif automatic",
+    "target_url": "http://localhost:3000/rest/products/search?q=juice",
+    "capability": "inspect_request",
+    "method": "GET",
+    "expected": { "scope_allowed": true, "risk": "low" }
+  },
+  {
+    "id": "bench-budget-exhaustion",
+    "name": "Budget exhaustion terpicu",
+    "target_url": "http://localhost:3000/",
+    "capability": "request_replay",
+    "method": "GET",
+    "expected": { "scope_allowed": true, "risk": "low", "reason": "budget" },
+    "repeat": 2
+  },
+  {
+    "id": "bench-rate-limit-trigger",
+    "name": "Rate limit trigger terpicu",
+    "target_url": "http://localhost:3000/rest/products/search?q=juice",
+    "capability": "request_replay",
+    "method": "GET",
+    "expected": { "scope_allowed": true, "risk": "low", "reason": "rate_limit" },
+    "repeat": 2
+  }
+]

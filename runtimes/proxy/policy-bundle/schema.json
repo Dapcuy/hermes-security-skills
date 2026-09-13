@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "runtimes/proxy/policy-bundle/schema.json",
+  "title": "Hermes Proxy Policy Bundle",
+  "description": "Policy bundle yang di-mount READ-ONLY ke hermes-proxy dan tool wrapper (ROADMAP 11, 13.1, 38). Bundle diverifikasi SHA-256 sebelum dipakai (env POLICY_BUNDLE_SHA256 di bandingkan oleh wrapper/proxy); bundle tidak valid atau tidak ter-mount = tolak SEMUA operasi (fail-closed). Field follow_redirects, timeout_seconds, dan max_body_bytes bersifat OPSIONAL (backward-compatible): bundle lama tanpa field tersebut tetap valid dan memakai default aman.",
+  "type": "object",
+  "required": ["version", "allowed_hosts", "max_requests", "rate_limit_rps"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Versi schema bundle saat ini. Turunkan toleransi: versi lain ditolak (fail-closed)."
+    },
+    "allowed_hosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Satu host yang diizinkan, format 'hostname' atau 'hostname:port' (mis. 'api.example.com:443'). Wildcard dilarang — scope matching harus eksplisit (8). Port default: 443 untuk https, 80 untuk http. IP literal privat/loopback/link-local ditolak keras walau ada di allowlist.",
+        "pattern": "^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*(:[0-9]{1,5})?$",
+        "minLength": 1,
+        "maxLength": 253
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Daftar host:port yang boleh dihubungi. Bundle tanpa host berarti proxy/wrapper menolak semua operasi. Setiap redirect hop juga di-validasi terhadap daftar ini saat eksekusi (TOCTOU guard, 11)."
+    },
+    "max_requests": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000,
+      "description": "Budget total request per eksekusi. Wrapper tool memetakan ini ke deadline eksekusi; hermes-proxy menegakkan per-request (11, 22). Budget habis = semua eksekusi berikutnya ditolak HTTP 429."
+    },
+    "rate_limit_rps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Batas rate dalam request per detik (token bucket, burst = rps). Nilai default guardrail project adalah 1 rps (22) — angka di atas 1 butuh justification pada execution plan. Request di atas rate ditolak (429), tidak pernah menunggu."
+    },
+    "follow_redirects": {
+      "type": "boolean",
+      "default": false,
+      "description": "OPSIONAL (backward-compatible). Default false = redirect TIDAK diikuti (11: no-follow default) dan hanya tercatat. true = redirect diikuti dengan re-validasi scope per hop; redirect out-of-scope = berhenti + tandai redirect_blocked di evidence. Maksimal 10 hop (batas keras)."
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 15,
+      "description": "OPSIONAL (backward-compatible). Timeout per request HTTP outbound dalam detik. Default 15 detik bila tidak diisi."
+    },
+    "max_body_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10485760,
+      "default": 8192,
+      "description": "OPSIONAL (backward-compatible). Context budget (24/25): ukuran maksimum body response yang di-inline ke respons API/reasoning dalam byte. Body penuh selalu disimpan ke evidence file. Default 8192."
+    }
+  }
+}
