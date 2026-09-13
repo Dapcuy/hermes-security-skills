@@ -6,6 +6,27 @@ memory/
 └── cases/    — case memory per engagement: memory/cases/<caseID>/
 ```
 
+## Prinsip owner — apa yang boleh masuk memory
+
+```
+Memory HANYA untuk:
+  - state kasus            (status engagement, finding, workspace)
+  - keputusan              (keputusan human: approval, adopsi, eskalasi)
+  - evidence reference     (hash + path + provenance, bukan salinan mentah)
+  - approval               (scope, budget, expiry, revocation)
+
+Memory BUKAN tempat menyimpan METODOLOGI security.
+Metodologi hidup di skills/ - curated, versioned, lolos linter (§7, §7.1).
+Pelajaran yang masih terikat satu kasus = entry case memory di bawah;
+bila pelajaran ternyata generalisasi metodologi, tulis sebagai SKILL.md
+baru (atau perbaiki skill yang ada), bukan sebagai entry memory.
+```
+
+Alasan: skill adalah sumber kebenaran metodologi yang direview dan
+ter-versioning; memory menumpuk state engagement yang berumur pendek.
+Mencampur keduanya membuat metodologi mengendap di tempat yang tidak
+direview dan tidak lulus linter.
+
 ## Case memory
 
 Setiap engagement punya direktori case terpisah (case isolation, §27).
@@ -16,6 +37,10 @@ Entry di dalamnya berformat sama dengan knowledge entry (lihat
   yang berasal dari target;
 - `expires_at` WAJIB — tidak ada data target yang persist tanpa batas
   waktu (§25 retention).
+
+Entry pelajaran spesifik-kasus (mis. `memory/cases/juice-demo/`) juga
+hidup di sini — pelajaran yang terikat konteks satu engagement, bukan
+metodologi umum.
 
 ## Retention (§25)
 

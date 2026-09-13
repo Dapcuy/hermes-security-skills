@@ -10,6 +10,28 @@ knowledge/
 └── reviewed/    — entry yang sudah lolos human review (state=reviewed)
 ```
 
+## Prinsip owner — apa yang boleh masuk knowledge
+
+```
+Knowledge HANYA untuk:
+  - pelajaran spesifik-kasus yang sudah direview (state=reviewed)
+  - keputusan yang direview beserta rationale-nya
+
+Knowledge BUKAN tempat generalisasi METODOLOGI security.
+Bila pelajaran ternyata generalisasi menjadi metodologi (teknik,
+workflow, kriteria yang berlaku lintas kasus), tulis sebagai SKILL.md
+baru atau perbaiki skill yang ada - curated, versioned, lolos linter
+(ROADMAP §7, §7.1) - bukan sebagai entry knowledge.
+```
+
+Prinsip yang sama berlaku sebaliknya untuk memory: memory hanya menyimpan
+state kasus, keputusan, evidence reference, dan approval (lihat
+`memory/README.md`). Contoh penerapan: `lesson-sqli-boolean-differential`
+adalah pelajaran spesifik-kasus engagement Juice Shop - teknik boolean
+differential-nya sudah ter-cover di `skills/web/injection-validation`,
+sehingga entry direlokasi ke `memory/cases/juice-demo/`, bukan dipertahankan
+sebagai entry knowledge.
+
 ## Format entry
 
 Markdown + frontmatter YAML subset (`internal/yamlmini`):

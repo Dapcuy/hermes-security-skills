@@ -52,12 +52,12 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 
 - **core/** (Tier 1): fondasi setiap engagement — scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting.
 - **recon/** (Tier 2): pemetaan permukaan — recon pasif dari sumber publik, enumerasi subdomain pasif via data source, probing teknologi aktif atas aset in-scope, port scanning terkendali ber-approval, indikasi subdomain takeover, ekstraksi endpoint dari data terekam, fingerprint teknologi, dan prioritisasi permukaan; `web-surface-mapping` yang satu tier dengannya berada di `web/`.
-- **http/** (Tier 3, placeholder): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, auth flow, capture browser.
-- **web/** (Tier 4): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, injection, SSRF, CSRF, upload, misconfiguration, validasi payload, dan penemuan path tersembunyi via fuzzing terkendali.
-- **api/** (Tier 5, placeholder): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token, rate limit, dan webhook.
-- **business-logic/** (Tier 6): kerentanan yang tak tertangkap scanner — workflow, transaksi, replay, race condition, isolasi multi-tenant, dan vulnerability chaining.
+- **http/** (Tier 3): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, analisis auth flow, dan analisis capture traffic browser.
+- **web/** (Tier 4): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, keamanan file upload, misconfiguration, validasi payload, validasi injection, analisis WAF, controlled fuzzing, dan penemuan path tersembunyi via fuzzing terkendali.
+- **api/** (Tier 5): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token/JWT, rate limit, dan webhook/callback.
+- **business-logic/** (Tier 6): kerentanan yang tak tertangkap scanner — workflow, transaksi, replay, race condition, isolasi multi-tenant, anomali perilaku, dan vulnerability chaining.
 - **source/** (Tier 7): review source code yang sepenuhnya pasif — triage codebase, review authorization, data flow server-side, deteksi secret, dan risiko dependensi; tanpa capability aktif.
-- **specialized/** (Tier 8): domain khusus sesuai kebutuhan nyata — keamanan integrasi LLM, keamanan MCP, dan responsible disclosure.
+- **specialized/** (Tier 8): domain khusus sesuai kebutuhan nyata — keamanan integrasi LLM, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, dan responsible disclosure.
 
 ## Reasoning Workflow
 
@@ -116,14 +116,14 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 |---|---|---|---|
 | `core/` | 1 | Fondasi setiap engagement: scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting. | 7 |
 | `recon/` | 2 | Pemetaan permukaan: recon pasif dari sumber publik, enumerasi subdomain pasif, probing teknologi aktif, port scanning terkendali (approval wajib), indikasi subdomain takeover, ekstraksi endpoint, fingerprint teknologi, prioritisasi permukaan. | 8 |
-| `http/` | 3 | (Placeholder) metodologi operasi HTTP melalui capability proxy: traffic analysis, replay, mutation, comparison. | 4 |
-| `web/` | 4 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, injection, SSRF, CSRF, misconfiguration, validasi payload, penemuan path via fuzzing terkendali. | 11 |
-| `api/` | 5 | (Placeholder) metodologi keamanan API: methodology, OpenAPI, REST, GraphQL, token, rate limit, webhook. | 2 |
-| `business-logic/` | 6 | Kerentanan yang tak tertangkap scanner: workflow, transaksi, replay, race condition, isolasi multi-tenant, vulnerability chaining. | 8 |
+| `http/` | 3 | Metodologi operasi HTTP melalui capability proxy: traffic analysis, replay, mutation, comparison, analisis auth flow, analisis capture traffic browser. | 6 |
+| `web/` | 4 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, file upload, misconfiguration, payload selection, injection validation, WAF analysis, controlled fuzzing, directory fuzzing. | 17 |
+| `api/` | 5 | Metodologi keamanan API: methodology, OpenAPI, REST testing, GraphQL, token/JWT, rate limit, webhook/callback. | 7 |
+| `business-logic/` | 6 | Kerentanan yang tak tertangkap scanner: workflow, transaksi, replay, race condition, isolasi multi-tenant, anomali perilaku, vulnerability chaining. | 8 |
 | `source/` | 7 | Review source code yang sepenuhnya pasif: triage codebase, review authorization, data flow server-side, deteksi secret, risiko dependensi. | 5 |
-| `specialized/` | 8 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: keamanan integrasi LLM, keamanan MCP, responsible disclosure. | 3 |
+| `specialized/` | 8 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: keamanan integrasi LLM, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, responsible disclosure. | 5 |
 
-**Total: 48 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui; lihat False Positive Checks).
+**Total: 63 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui, 2026-09-13; lihat False Positive Checks).
 
 ## Related Skills
 

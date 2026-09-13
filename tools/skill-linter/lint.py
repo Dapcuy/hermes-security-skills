@@ -15,6 +15,11 @@ aturan linter (ROADMAP.md §7.1):
                         dilarang - skill meminta capability, bukan tool (§4.1)
   5. capability         capability yang dirujuk di section "Required
                         Capabilities" harus terdaftar di allowlist
+  6. routing-reference  (aktif saat linting direktori skills/) konsistensi
+                        dua arah antara ROUTING.md dan skills/**/SKILL.md:
+                        FORWARD - setiap skill yang dirujuk ROUTING.md harus
+                        punya skills/**/<name>/SKILL.md; REVERSE - setiap
+                        SKILL.md harus disebut minimal sekali di ROUTING.md
 
 Implementasi Python 3 stdlib-only: frontmatter (subset YAML "key: value")
 di-parse manual, tanpa dependensi PyYAML.
@@ -128,6 +133,57 @@ ALLCAPS_PLACEHOLDER_RE = re.compile(r"^[A-Z0-9_]+$")
 FRONTMATTER_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$")
 FOLDED_MARKERS = {">", "|", ">-", "|-", ">+", "|+"}
 _TRUE_WORDS = {"true", "yes", "on"}
+
+# ---------------------------------------------------------------------------
+# Routing-reference check (FORWARD + REVERSE terhadap ROUTING.md)
+# ---------------------------------------------------------------------------
+
+ROUTING_FILENAME = "ROUTING.md"
+SKILLS_DIRNAME = "skills"
+
+# Skill yang sengaja BELUM punya SKILL.md - ditunda sesuai keputusan maintainer
+# (ROADMAP §6 Tier 8). Rujukan mereka di ROUTING.md tidak dianggap error.
+DEFERRED_SKILLS = frozenset(
+    {
+        "cloud-security",
+        "mobile-security",
+        "binary-analysis",
+        "firmware-analysis",
+    }
+)
+
+# Nama kategori langsung di bawah skills/ (ROADMAP §6, §29) - bukan nama skill.
+CATEGORY_NAMES = frozenset(
+    {
+        "api",
+        "business-logic",
+        "core",
+        "http",
+        "recon",
+        "source",
+        "specialized",
+        "web",
+    }
+)
+
+# Kosakata status/authorization yang muncul dalam backtick di ROUTING.md
+# (ROADMAP §8, §26) - bukan nama skill.
+STATE_VOCABULARY = frozenset(
+    {
+        "confirmed",
+        "granted",
+        "offline-lab",
+        "pending",
+        "suspected",
+    }
+)
+
+# Token ROUTING.md yang dikecualikan dari FORWARD check: skill deferred
+# (ditunda sesuai keputusan maintainer), nama kategori, kosakata status,
+# dan nama capability allowlist.
+EXCLUDED_ROUTING_TOKENS = (
+    DEFERRED_SKILLS | CATEGORY_NAMES | STATE_VOCABULARY | frozenset(ALLOWED_CAPABILITIES)
+)
 _FALSE_WORDS = {"false", "no", "off"}
 
 
@@ -444,6 +500,108 @@ def lint_file(path: Path):
 
 
 # ---------------------------------------------------------------------------
+# Routing-reference check (ROADMAP §6 - ROUTING.md vs skills/**/SKILL.md)
+# ---------------------------------------------------------------------------
+
+
+def extract_routing_tokens(routing_text: str) -> set:
+    """Kumpulkan token kebab-case yang ditulis dalam backtick di ROUTING.md.
+
+    Token diambil dari isi backtick utuh; isi yang mengandung spasi (mis.
+    ``scope validation``) atau format lain (.md, snake_case) tidak dihitung
+    sebagai kandidat nama skill.
+    """
+    tokens = set()
+    for raw in re.findall(r"`([^`\n]+)`", routing_text):
+        token = raw.strip()
+        if NAME_RE.match(token):
+            tokens.add(token)
+    return tokens
+
+
+def routing_referenced_skills(routing_text: str) -> set:
+    """Token ROUTING.md yang WAJIB punya skills/**/<name>/SKILL.md (FORWARD).
+
+    Sama dengan extract_routing_tokens() minus exclusion: skill deferred
+    (ditunda sesuai keputusan maintainer), nama kategori, kosakata status,
+    dan nama capability allowlist.
+    """
+    return extract_routing_tokens(routing_text) - EXCLUDED_ROUTING_TOKENS
+
+
+def find_routing_context(paths):
+    """Infer (skills_dir, routing_path) dari daftar file target lint.
+
+    Routing check aktif bila salah satu target berada di dalam direktori
+    bernama 'skills' (mis. linting ``skills/`` atau subdirektorinya); repo
+    root di-infer sebagai parent dari skills/ dan ROUTING.md dicari di sana.
+    Kembalikan (None, None) bila tidak ada target di dalam skills/, atau
+    (skills_dir, None) bila ROUTING.md tidak ditemukan di root yang di-infer.
+    """
+    for path in paths:
+        for parent in [path, *path.parents]:
+            if parent.name == SKILLS_DIRNAME and parent.is_dir():
+                routing = parent.parent / ROUTING_FILENAME
+                return parent, (routing if routing.is_file() else None)
+    return None, None
+
+
+def check_routing_references(skills_dir: Path, routing_path: Path):
+    """Konsistensi dua arah ROUTING.md <-> skills/**/SKILL.md.
+
+    FORWARD: setiap nama skill yang dirujuk ROUTING.md harus punya
+    skills/**/<name>/SKILL.md - kalau tidak = error.
+    REVERSE: setiap skills/**/<name>/SKILL.md harus disebut minimal sekali
+    di ROUTING.md - kalau tidak = error.
+    """
+    violations = []
+    routing_text = routing_path.read_text(encoding="utf-8")
+    all_tokens = extract_routing_tokens(routing_text)
+    referenced = routing_referenced_skills(routing_text)
+
+    try:
+        categories = sorted(d for d in skills_dir.iterdir() if d.is_dir())
+    except OSError as exc:
+        return [Violation("routing-reference", f"gagal membaca {skills_dir}: {exc}")]
+
+    def skill_exists(name: str) -> bool:
+        return any((cat / name / "SKILL.md").is_file() for cat in categories)
+
+    # FORWARD: rujukan ROUTING.md tanpa folder skill = error
+    for token in sorted(referenced):
+        if not skill_exists(token):
+            violations.append(
+                Violation(
+                    "routing-reference",
+                    f"FORWARD: ROUTING.md merujuk skill '{token}' tetapi "
+                    f"skills/**/{token}/SKILL.md tidak ditemukan - buat skill-nya, "
+                    f"hapus/perbaiki rujukannya, atau (bila memang ditunda sesuai "
+                    f"keputusan maintainer) daftarkan di DEFERRED_SKILLS pada "
+                    f"tools/skill-linter/lint.py",
+                )
+            )
+
+    # REVERSE: SKILL.md tanpa rute di ROUTING.md = error
+    for cat in categories:
+        for skill_md in sorted(cat.glob("*/SKILL.md")):
+            name = skill_md.parent.name
+            if name not in all_tokens:
+                try:
+                    display = skill_md.relative_to(skills_dir.parent).as_posix()
+                except ValueError:
+                    display = str(skill_md)
+                violations.append(
+                    Violation(
+                        "routing-reference",
+                        f"REVERSE: skill '{name}' ({display}) tidak disebut sekali "
+                        f"pun di ROUTING.md - tambahkan rutenya pada tabel "
+                        f"kategori terkait",
+                    )
+                )
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -532,10 +690,43 @@ def main(argv=None) -> int:
         if violations:
             failed += 1
 
+    # ---- routing-reference check (aktif saat target di dalam skills/) ----
+    skills_dir, routing_path = find_routing_context(files)
+    routing_violations = []
+    routing_active = False
+    if skills_dir is not None:
+        routing_active = True
+        if routing_path is None:
+            print(
+                f"NOTE: routing-reference check dilewati - {ROUTING_FILENAME} "
+                f"tidak ditemukan di {skills_dir.parent}",
+                file=sys.stderr,
+            )
+        else:
+            routing_violations = check_routing_references(skills_dir, routing_path)
+            print("")
+            print(f"{routing_path} - routing-reference check (FORWARD + REVERSE)")
+            if not routing_violations:
+                print("   OK")
+            for v in routing_violations:
+                print(f"   {v}")
+
     total = len(files)
     passed = total - failed
     print("")
-    print(f"Ringkasan: {total} file diperiksa, {passed} lolos, {failed} gagal")
+    routing_note = ""
+    if routing_active:
+        routing_note = (
+            "; routing-reference: "
+            + (
+                f"{len(routing_violations)} pelanggaran"
+                if routing_violations
+                else "OK"
+            )
+        )
+    print(f"Ringkasan: {total} file diperiksa, {passed} lolos, {failed} gagal{routing_note}")
+    if routing_violations:
+        return 1
     return 1 if failed else 0
 
 

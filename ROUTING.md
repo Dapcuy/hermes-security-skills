@@ -69,6 +69,10 @@ Catatan: semua operasi HTTP aktif hanya melalui capability proxy (`request_repla
 | Header CORS/kebijakan origin janggal | `cors-analysis` | `security-misconfiguration` |
 | Konfigurasi terbuka (debug, default creds, listing) | `security-misconfiguration` | `passive-recon` |
 | Dugaan ada path/direktori tersembunyi (backup, panel, staging) di bawah prefix in-scope | `directory-fuzzing` | `web-surface-mapping`, `endpoint-discovery` |
+| Test terkendali butuh payload terpilih dulu (konteks, risk, budget) sebelum eksekusi | `payload-selection` | `controlled-fuzzing` |
+| Satu parameter perlu diuji dengan payload set terkurasi di bawah budget dan rate ketat | `controlled-fuzzing` | `payload-selection`, `injection-validation` |
+| Indikasi injection (error, boolean differential, time delay) perlu dikonfirmasi atau dibantah dengan baseline bersih | `injection-validation` | `vulnerability-validation`, `payload-selection` |
+| Pola respons menunjukkan ada WAF/CDN/rate-limit layer yang memengaruhi interpretasi hasil | `waf-analysis` | `false-positive-analysis`, `technology-fingerprinting` |
 
 ## 5. API Security (Tier 5)
 
@@ -92,6 +96,7 @@ Catatan: semua operasi HTTP aktif hanya melalui capability proxy (`request_repla
 | Dugaan aksi bisa direplay (double-spend, duplikat) | `replay-and-duplicate-action-analysis` | `transaction-analysis` |
 | Dugaan race condition pada aksi kritis | `race-condition-analysis` | `vulnerability-validation` |
 | Dugaan kebocoran data antar tenant | `multi-tenant-isolation` | `idor-and-bola` |
+| History dan evidence terekam perlu ditambang anomali perilaku (tanpa testing aktif) | `behavioral-anomaly-analysis` | `http-proxy-traffic-analysis`, `multi-tenant-isolation` |
 | Beberapa temuan kecil berpotensi jadi rantai serangan | `vulnerability-chaining` | `novelty-assessment` |
 
 ## 7. Source Review (Tier 7)

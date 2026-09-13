@@ -9,6 +9,7 @@ Jalankan dari root project:
 import importlib.util
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -299,6 +300,150 @@ class CoreSkillsTest(unittest.TestCase):
         res = run_linter(CORE_SKILLS_DIR)
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("7 file diperiksa, 7 lolos, 0 gagal", res.stdout)
+
+
+class RoutingReferenceUnitTest(unittest.TestCase):
+    """Unit test helper routing-reference check (FORWARD + REVERSE)."""
+
+    def test_extract_routing_tokens(self):
+        text = (
+            "| a | `idor-and-bola` | `granted` |\n"
+            "| b | `scope validation` | `ROADMAP.md` |\n"
+            "| c | `request_replay` | `bfla` |\n"
+        )
+        tokens = lint.extract_routing_tokens(text)
+        self.assertEqual(tokens, {"idor-and-bola", "granted", "bfla"})
+
+    def test_referenced_skills_exclude_deferred_category_state_capability(self):
+        text = (
+            "`cloud-security` `mobile-security` `binary-analysis` `firmware-analysis` "
+            "`web` `api` `granted` `pending` `confirmed` `suspected` `offline-lab` "
+            "`request_replay` `ssrf-analysis`"
+        )
+        referenced = lint.routing_referenced_skills(text)
+        self.assertEqual(referenced, {"ssrf-analysis"})
+
+    def test_forward_missing_folder_detected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skills = root / "skills" / "web" / "real-skill"
+            skills.mkdir(parents=True)
+            (skills / "SKILL.md").write_text(
+                make_skill_text(name="real-skill"), encoding="utf-8"
+            )
+            (root / "ROUTING.md").write_text(
+                "# Routing\n\n| x | `real-skill` | — |\n| y | `phantom-skill` | — |\n",
+                encoding="utf-8",
+            )
+            violations = lint.check_routing_references(
+                root / "skills", root / "ROUTING.md"
+            )
+            self.assertEqual(len(violations), 1, [str(v) for v in violations])
+            self.assertEqual(violations[0].rule, "routing-reference")
+            self.assertIn("FORWARD", violations[0].message)
+            self.assertIn("phantom-skill", violations[0].message)
+
+    def test_reverse_unrouted_skill_detected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            routed = root / "skills" / "web" / "routed-skill"
+            orphan = root / "skills" / "web" / "orphan-skill"
+            orphan.mkdir(parents=True)
+            routed.mkdir(parents=True)
+            (routed / "SKILL.md").write_text(
+                make_skill_text(name="routed-skill"), encoding="utf-8"
+            )
+            (orphan / "SKILL.md").write_text(
+                make_skill_text(name="orphan-skill"), encoding="utf-8"
+            )
+            (root / "ROUTING.md").write_text(
+                "# Routing\n\n| x | `routed-skill` | — |\n", encoding="utf-8"
+            )
+            violations = lint.check_routing_references(
+                root / "skills", root / "ROUTING.md"
+            )
+            self.assertEqual(len(violations), 1, [str(v) for v in violations])
+            self.assertIn("REVERSE", violations[0].message)
+            self.assertIn("orphan-skill", violations[0].message)
+
+    def test_happy_path_and_deferred_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real = root / "skills" / "web" / "real-skill"
+            real.mkdir(parents=True)
+            (real / "SKILL.md").write_text(
+                make_skill_text(name="real-skill"), encoding="utf-8"
+            )
+            (root / "ROUTING.md").write_text(
+                # deferred skill dirujuk tapi memang belum punya SKILL.md -
+                # ditunda sesuai keputusan maintainer, tidak boleh error.
+                "# Routing\n\n| x | `real-skill` | — |\n"
+                "| y | `cloud-security` | `mobile-security` |\n"
+                "| z | `binary-analysis` | `firmware-analysis` |\n"
+                "| w | `granted` `pending` `offline-lab` `web` | — |\n",
+                encoding="utf-8",
+            )
+            violations = lint.check_routing_references(
+                root / "skills", root / "ROUTING.md"
+            )
+            self.assertEqual(violations, [], [str(v) for v in violations])
+
+
+class RoutingReferenceCliTest(unittest.TestCase):
+    """Perilaku CLI end-to-end untuk routing-reference check."""
+
+    def _make_repo(self, root: Path, routing_rows: str, skills=("real-skill",)):
+        skills_root = root / "skills" / "web"
+        skills_root.mkdir(parents=True)
+        for name in skills:
+            d = skills_root / name
+            d.mkdir()
+            (d / "SKILL.md").write_text(make_skill_text(name=name), encoding="utf-8")
+        (root / "ROUTING.md").write_text(
+            "# Routing\n\n" + routing_rows, encoding="utf-8"
+        )
+        return skills_root
+
+    def test_phantom_route_fails_with_clear_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skills_root = self._make_repo(
+                Path(tmp),
+                "| x | `real-skill` | — |\n| y | `phantom-skill` | — |\n",
+            )
+            res = run_linter(skills_root)
+            self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+            self.assertIn("routing-reference", res.stdout)
+            self.assertIn("FORWARD", res.stdout)
+            self.assertIn("phantom-skill", res.stdout)
+            self.assertIn("1 pelanggaran", res.stdout)
+
+    def test_unrouted_skill_fails_with_clear_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skills_root = self._make_repo(
+                Path(tmp),
+                "| x | `real-skill` | — |\n",
+                skills=("real-skill", "orphan-skill"),
+            )
+            res = run_linter(skills_root)
+            self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+            self.assertIn("routing-reference", res.stdout)
+            self.assertIn("REVERSE", res.stdout)
+            self.assertIn("orphan-skill", res.stdout)
+
+    def test_deferred_tokens_excluded_and_consistent_repo_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skills_root = self._make_repo(
+                Path(tmp),
+                "| x | `real-skill` | — |\n"
+                "| y | `cloud-security` `mobile-security` | — |\n"
+                "| z | `binary-analysis` `firmware-analysis` | — |\n"
+                "| w | `granted` `offline-lab` | — |\n",
+            )
+            res = run_linter(skills_root)
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+            self.assertIn("routing-reference check (FORWARD + REVERSE)", res.stdout)
+            self.assertIn("routing-reference: OK", res.stdout)
+            self.assertIn("1 file diperiksa, 1 lolos, 0 gagal; routing-reference: OK", res.stdout)
 
 
 if __name__ == "__main__":

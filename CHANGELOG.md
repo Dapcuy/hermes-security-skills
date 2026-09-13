@@ -13,6 +13,18 @@ Format mengikuti semangat [Keep a Changelog](https://keepachangelog.com/), penom
 - **`hermes-security case brief --case <id>`** — ringkasan konteks satu case dalam satu output: status workspace `jobs/<case>/` (aktif/aborted), approval store (state aktif/revoked/expired/habis + sisa budget), dan statistik event index (jumlah request per method, rentang waktu, evidence terakhir + sha256) — plus catatan eksplisit bila sumber data kosong.
 - **`hermes-security case list`** — daftar semua case dari `jobs/` beserta statusnya (direktori evidence dikecualikan).
 - **Alur `case_id` end-to-end (memory diperkuat):** POST `/execute` hermes-proxy menerima field opsional `case` (slug `[a-z0-9-]` maks 64, ditolak fail-closed bila invalid); evidence file membawa `case_id`; index event store (`internal/events`) mengisi field `case_id` dan `list_history` menerima filter opsional `case`; MCP `request_replay` meneruskan `case` ke proxy sehingga evidence + index terlabel per engagement.
+- **15 skill baru (gelombang ekspansi Tier 3–8):**
+  - `skills/web/`: `ssrf-analysis`, `injection-analysis`, `xss-analysis`, `csrf-analysis`, `file-upload-security`, `cors-analysis`;
+  - `skills/api/`: `rest-api-testing`, `api-rate-limit-analysis`, `jwt-and-token-analysis`, `graphql-security`, `webhook-and-callback-security`;
+  - `skills/http/`: `http-proxy-auth-flow-analysis`, `http-proxy-browser-traffic-analysis`;
+  - `skills/specialized/`: `skill-supply-chain-review` (review skill/tool provider image pihak ketiga sebelum diadopsi — tanpa capability aktif) dan `novelty-assessment` (klasifikasi kebaruan temuan sesuai §28 — tidak pernah menyatakan zero-day otomatis; capability `list_history` opsional). Total skill kini 63.
+- **Linter routing-reference check (§7.1, permintaan owner):** `tools/skill-linter/lint.py` kini memvalidasi konsistensi dua arah `ROUTING.md` <-> `skills/**/SKILL.md` saat linting direktori `skills/` — FORWARD: setiap skill yang dirujuk ROUTING.md harus punya `skills/**/<name>/SKILL.md`; REVERSE: setiap SKILL.md harus disebut minimal sekali di ROUTING.md. Skill deferred (`cloud-security`, `mobile-security`, `binary-analysis`, `firmware-analysis` — ditunda sesuai keputusan maintainer), nama kategori, kosakata status, dan capability allowlist dikecualikan.
+- **Prinsip memory owner (dokumentasi):** `memory/README.md` dan `knowledge/README.md` kini menegaskan memory hanya untuk state kasus, keputusan, evidence reference, dan approval — metodologi security TIDAK disimpan di memory/knowledge; metodologi hidup di skills/ (curated, versioned, lolos linter). Generalisasi metodologi dari pelajaran kasus ditulis sebagai SKILL.md baru.
+
+### Changed
+
+- **Relokasi entry metodologi ke case memory (sesuai prinsip owner).** `knowledge/reviewed/lesson-sqli-boolean-differential.md` dipindah ke `memory/cases/juice-demo/` — itu pelajaran spesifik-kasus engagement Juice Shop, bukan metodologi (teknik boolean differential sudah ter-cover di `skills/web/injection-validation`). Frontmatter disesuaikan (`state: captured`) dan diberi catatan relokasi bertanggal.
+- **ROUTING.md dilengkapi** rute untuk skill yang belum ter-route (`payload-selection`, `controlled-fuzzing`, `injection-validation`, `waf-analysis`, `behavioral-anomaly-analysis`) — tertangkap oleh routing-reference check arah REVERSE; rute 15 skill baru telah lengkap.
 
 ### Removed
 
