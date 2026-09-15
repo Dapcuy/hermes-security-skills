@@ -79,6 +79,45 @@ func postExecute(t *testing.T, api *httptest.Server, body string) (int, map[stri
 	return resp.StatusCode, m
 }
 
+func TestHandleHealthAndReady(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		srv  *Server
+		path string
+		code int
+		body string
+	}{
+		{"live", &Server{}, "/healthz", http.StatusOK, "ok\n"},
+		{"ready", &Server{engine: &proxycore.Engine{}}, "/readyz", http.StatusOK, "ready\n"},
+		{"not ready", &Server{}, "/readyz", http.StatusServiceUnavailable, "not ready\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+			if tc.path == "/healthz" {
+				tc.srv.HandleHealth(rec, req)
+			} else {
+				tc.srv.HandleReady(rec, req)
+			}
+			if rec.Code != tc.code || rec.Body.String() != tc.body {
+				t.Fatalf("response = (%d, %q), want (%d, %q)", rec.Code, rec.Body.String(), tc.code, tc.body)
+			}
+			if !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") {
+				t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
+			}
+		})
+	}
+}
+
+func TestHandleHealthRejectsNonGet(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	(&Server{}).HandleHealth(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("code = %d, want 405", rec.Code)
+	}
+}
+
 // TestHandleExecuteEndToEnd: eksekusi nyata via control channel.
 func TestHandleExecuteEndToEnd(t *testing.T) {
 	api, target, hit, evDir := newTestStack(t, nil)
@@ -310,6 +349,20 @@ func TestHandleExecuteHashFailClosed(t *testing.T) {
 	// LoadBundle menolak hash kosong/mismatch — diverifikasi langsung.
 	if _, err := proxycore.LoadBundle(filepath.Join(t.TempDir(), "x.json"), ""); err == nil {
 		t.Error("hash kosong harus error")
+	}
+}
+
+func TestRunHealthcheck(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/readyz" {
+			t.Fatalf("path = %s, want /readyz", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready\n"))
+	}))
+	defer ts.Close()
+	if err := runHealthcheck(strings.TrimPrefix(ts.URL, "http://")); err != nil {
+		t.Fatalf("runHealthcheck: %v", err)
 	}
 }
 

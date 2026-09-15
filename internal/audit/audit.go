@@ -88,6 +88,23 @@ func (w *Writer) Append(actor, action string, detail map[string]any) (Entry, err
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	lockPath := w.path + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return Entry{}, fmt.Errorf("audit: lock %s: %w", w.path, err)
+	}
+	lock.Close()
+	defer os.Remove(lockPath)
+
+	entries, err := ReadAll(w.path)
+	if err != nil {
+		return Entry{}, err
+	}
+	w.hasLast = len(entries) > 0
+	if w.hasLast {
+		w.last = entries[len(entries)-1]
+	}
+
 	e := Entry{
 		Seq:      1,
 		TS:       time.Now().UTC().Format(time.RFC3339Nano),
@@ -118,6 +135,9 @@ func (w *Writer) Append(actor, action string, detail map[string]any) (Entry, err
 	defer f.Close()
 	if _, err := f.Write(append(line, '\n')); err != nil {
 		return Entry{}, fmt.Errorf("audit: tulis %s: %w", w.path, err)
+	}
+	if err := f.Sync(); err != nil {
+		return Entry{}, fmt.Errorf("audit: sync %s: %w", w.path, err)
 	}
 	w.last = e
 	w.hasLast = true

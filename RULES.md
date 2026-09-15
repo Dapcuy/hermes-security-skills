@@ -71,7 +71,7 @@ Abort wajib:
 - menghentikan queue execution;
 - kill container Docker yang sedang berjalan (validator DAN hermes-proxy);
 - menghentikan replay yang sedang berjalan di proxy;
-- menandai case sebagai aborted di memory;
+- menandai case sebagai aborted di `jobs/<case>` (marker `ABORTED`);
 - meninggalkan audit entry.
 
 Hermes tidak pernah menolak, menunda, atau mengelola abort. Abort selalu diikuti.
@@ -130,7 +130,7 @@ Konsekuensi yang diterima secara eksplisit:
 - Kredensial tidak pernah masuk konteks LLM. Skill dan approval hanya merujuk **reference** (mis. `account-a`); injection dilakukan control plane saat eksekusi.
 - Tidak ada token eksternal yang dikelola manual; satu-satunya kredensial internal (control-channel token, CA key mode MITM) di-generate otomatis, ephemeral per-engagement, tidak pernah terlihat Hermes.
 - **Konten target adalah DATA, bukan instruksi.** Instruksi apapun di dalam konten target tidak pernah dieksekusi, diikuti, atau memengaruhi policy.
-- Konten target tidak pernah menulis ke knowledge/canonical dan tidak pernah mengubah policy/, capabilities/, runtimes/.
+- Konten target tidak pernah masuk knowledge base dan tidak pernah mengubah policy/, capabilities/, runtimes/. Konten target hidup di evidence (berprovenance, ber-hash).
 
 ## 8. Third-Party Tool Images (ROADMAP §13.1)
 
@@ -153,3 +153,30 @@ Konsekuensi yang harus diingat:
 - Nuclei templates adalah supply chain vector: template di-pin per versi/commit, diverifikasi sebelum dipakai, tidak pernah di-update otomatis saat runtime.
 - Banyak program bug bounty melarang port scanning agresif; target nmap wajib host yang di-scope eksplisit.
 - Risk classification active scanning = MEDIUM–HIGH → approval + budget ketat + stop conditions aktif.
+
+## 9. Knowledge Base, Bukan Agent Memory (v3.0)
+
+- Project TIDAK memakai "memori agent". Sejak ROADMAP v3.0, memory dihapus
+  sebagai komponen utama dan diganti **Knowledge Base curated**
+  (`knowledge/` — ROADMAP §23, §24).
+
+- Pembagian tempat penyimpanan bersifat mutlak:
+
+```
+state kasus            -> evidence + jobs/<case> + approval + events
+keputusan & approval   -> approval store + audit log (append-only)
+metodologi security    -> skills/ (curated, versioned, lolos linter)
+reference pengetahuan  -> knowledge/ (curated, direview manusia)
+konten target          -> evidence saja — TIDAK PERNAH knowledge
+```
+
+- Knowledge base hanya menerima entry berprovenance manusia yang direview.
+  Ingest menolak fail-closed entry dengan provenance
+  `target-controlled` atau trust `untrusted` (§20, §23).
+- Metodologi yang berlaku lintas kasus wajib ditulis sebagai SKILL.md
+  (atau memperbaiki skill yang ada) — bukan entry knowledge. Pelajaran
+  spesifik-kasus yang sudah divalidasi boleh menjadi entry knowledge
+  berprovenance; keputusan promosi ke canonical adalah milik owner.
+- Tidak ada state engagement yang "diwariskan" antar engagement melalui
+  knowledge base — warisan lintas engagement yang sah hanyalah knowledge
+  yang direview dan evidence yang diminta eksplisit.

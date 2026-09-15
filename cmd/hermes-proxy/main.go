@@ -31,13 +31,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"hermes-security-skills/internal/observability"
 	"hermes-security-skills/internal/proxycore"
 )
 
@@ -47,6 +50,8 @@ const shutdownGrace = 5 * time.Second
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "alamat listen control channel (default loopback)")
+	healthcheck := flag.Bool("healthcheck", false, "jalankan probe readiness lokal lalu exit")
+	healthcheckAddr := flag.String("healthcheck-addr", "127.0.0.1:8080", "alamat readiness lokal untuk --healthcheck")
 	bind := flag.String("bind", "loopback", `"loopback" (default) atau "all" (0.0.0.0) — "all" HANYA untuk mode container di Docker network internal (§11); JANGAN pernah expose control channel ke luar`)
 	bundlePath := flag.String("bundle", "", "path policy bundle JSON")
 	bundleSHA := flag.String("bundle-sha256", "", "sha256 hex yang diharapkan untuk bundle (wajib)")
@@ -57,6 +62,14 @@ func main() {
 	caOut := flag.String("ca-out", "", "opsional: ekspor sertifikat publik CA MITM ke file PEM (TIDAK menyertakan private key)")
 	targetCA := flag.String("target-ca", "", "opsional (lab/testing): PEM CA tambahan untuk VERIFIKASI TLS TERHADAP TARGET (mis. target python ssl self-signed); kosong = system roots. TIDAK berhubungan dengan trust client terhadap CA MITM")
 	flag.Parse()
+
+	if *healthcheck {
+		if err := runHealthcheck(*healthcheckAddr); err != nil {
+			fmt.Fprintln(os.Stderr, "hermes-proxy healthcheck:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *bundlePath == "" {
 		fmt.Fprintln(os.Stderr, "hermes-proxy: --bundle wajib diisi (fail-closed: tanpa policy bundle proxy menolak semua)")
@@ -109,9 +122,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &Server{engine: engine}
+	metrics := observability.NewMetrics()
+	logger := observability.NewLogger(os.Stdout)
+	srv := &Server{engine: engine, metrics: metrics, logger: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/execute", srv.HandleExecute)
+	mux.HandleFunc("/healthz", srv.HandleHealth)
+	mux.HandleFunc("/readyz", srv.HandleReady)
+	mux.HandleFunc("/metrics", metrics.Handler)
 	controlServer := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -127,6 +145,7 @@ func main() {
 	}
 
 	servers := []listenerServer{{srv: controlServer, ln: controlLn}}
+	var mitmProxy *proxycore.MITMProxy
 
 	if *mitm {
 		// Mode 2 — TLS MITM (EKSPERIMENTAL). CA ephemeral in-memory per
@@ -144,8 +163,9 @@ func main() {
 			}
 			fmt.Printf("hermes-proxy: sertifikat publik CA MITM diekspor ke %s\n", *caOut)
 		}
+		mitmProxy = proxycore.NewMITMProxy(ca, engine)
 		mitmSrv := &http.Server{
-			Handler:           &mitmPlainHandler{connect: proxycore.NewMITMProxy(ca, engine), engine: engine},
+			Handler:           &mitmPlainHandler{connect: mitmProxy, engine: engine},
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 		mitmLn, err := net.Listen("tcp", *mitmAddr)
@@ -170,10 +190,35 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := serveUntilSignal(ctx, shutdownGrace, servers...); err != nil {
+		if mitmProxy != nil {
+			mitmProxy.Close()
+		}
 		fmt.Fprintln(os.Stderr, "hermes-proxy:", err)
 		os.Exit(1)
 	}
+	if mitmProxy != nil {
+		mitmProxy.Close()
+	}
 	fmt.Println("hermes-proxy: shutdown selesai — semua listener ditutup, request in-flight selesai (evidence utuh).")
+}
+
+// runHealthcheck probes only the local readiness endpoint. It intentionally
+// runs before bundle loading so distroless container healthchecks need no shell.
+func runHealthcheck(addr string) error {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + addr + "/readyz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "ready" {
+		return fmt.Errorf("readiness returned status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // loadCAPool memuat satu atau lebih sertifikat PEM CA ke x509.CertPool

@@ -45,7 +45,7 @@ risk: medium
 ## Required Capabilities
 
 - `openapi_analysis` — mengekstrak path, method, parameter, dan schema dari spec sebagai rencana uji.
-- `list_history` — menemukan endpoint yang terekam namun tidak terdokumentasi.
+
 - `request_replay` — menjalankan request uji di dalam approval scoped.
 - `response_comparison` — membandingkan respons baseline versus hasil variasi input.
 
@@ -67,7 +67,7 @@ Skill tidak menentukan provider; replay aktif hanya berjalan melalui provider pr
 3. Uji semantik method: method yang tidak terdokumentasi pada path yang sama, satu request per kombinasi, di dalam budget.
 4. Jalankan negative testing terbatas: satu variasi per iterasi (salah tipe, field wajib hilang, nilai kosong), bandingkan dengan baseline.
 5. Kumpulkan observasi error handling: status yang tidak sesuai kondisi, pesan yang membocorkan internal, dan inkonsistensi antar endpoint.
-6. Rutekan sinyal lintas area: pola object-level → `idor-and-bola`; field berlebihan yang diterima → mass assignment via `http-proxy-request-mutation`.
+6. Rutekan sinyal lintas area: pola object-level → `idor-and-bola`; field berlebihan yang diterima → mass assignment via `http-request-mutation`.
 7. Simpan matrix endpoint × uji × hasil sebagai evidence; tiap anomali berstatus observation dengan referensi request id.
 
 ## Allowed Operations
@@ -127,6 +127,6 @@ Skill tidak menentukan provider; replay aktif hanya berjalan melalui provider pr
 - `api-security-methodology` — peta area dan prioritas tempat skill ini bekerja.
 - `openapi-analysis` — penyuplai inventaris spec dan deteksi drift.
 - `idor-and-bola` — rute sinyal object-level authorization.
-- `http-proxy-request-mutation` — rute uji mass assignment.
+- `http-request-mutation` — rute uji mass assignment.
 - `api-rate-limit-analysis`, `graphql-security`, `jwt-and-token-analysis` — rute abuse control dan token.
 - `vulnerability-validation`, `false-positive-analysis` — kontrak validasi dan triase observation.

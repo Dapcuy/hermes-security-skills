@@ -49,7 +49,7 @@ risk: medium
 ## Required Capabilities
 
 - `inspect_request` — membedah struktur request terekam: lokasi parameter, encoding, dan tipe konten untuk menentukan konteks parser.
-- `list_history` — mengumpulkan perilaku existing: error, respons tidak lazim, dan baseline per entry point.
+
 - `request_replay` — menjalankan probe ringan dengan marker sintaksis benign, satu variasi per iterasi.
 - `response_comparison` — membandingkan respons baseline dengan respons probe untuk mengklasifikasikan sinyal.
 - Skill tidak menentukan provider; eksekusi replay hanya berjalan di provider proxy (ROADMAP §4.1, §5.2).

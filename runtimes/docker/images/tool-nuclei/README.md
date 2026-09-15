@@ -2,7 +2,7 @@
 
 Satu tool = satu image terpisah. Image ini berisi:
 
-- `nuclei` **v3.3.9** (ter-pin, di-install **saat build** — bukan runtime).
+- `nuclei` **v3.11.1** (ter-pin, di-install **saat build** — bukan runtime).
 - **Nuclei templates ter-bake** di `/nuclei-templates` pada tag terpin
   (`ARG NUCLEI_TEMPLATES_TAG`, saat ini `v10.4.8`) + file
   `/nuclei-templates/.hermes-templates-version` yang dicatat wrapper ke
@@ -58,7 +58,7 @@ review): `--build-arg NUCLEI_TEMPLATES_TAG=vX.Y.Z`.
    test `--templates` seperti di bawah).
 5. Satu PR = satu bump versi, sebutkan tag lama → baru di deskripsi PR.
 
-Catatan: versi nuclei (`v3.3.9`) ter-pin di Dockerfile **dan** di
+Catatan: versi nuclei (`v3.11.1`) ter-pin di Dockerfile **dan** di
 `wrapper/main.go` (`const toolVersion`) — keduanya wajib diganti bersamaan.
 
 ## Cara menjalankan (via wrapper)

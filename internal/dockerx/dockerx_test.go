@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -290,6 +291,98 @@ func TestServerVersion(t *testing.T) {
 	if err != nil || v != "29.7.2" {
 		t.Errorf("serverVersion = %q, %v", v, err)
 	}
+}
+
+func TestVerifyImageRejectsTagEvenWithExpectedDigest(t *testing.T) {
+	const digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	fake := &fakeExecer{responses: map[string]string{"image": `["registry.example/tool@` + digest + `"]`}}
+	sig := &recordingSignatureVerifier{}
+	if err := VerifyImage(context.Background(), fake, sig, ImageVerificationSpec{
+		Image: "registry.example/tool:release", ExpectedDigest: digest, SignatureRequired: true,
+	}); err == nil || !strings.Contains(err.Error(), "digest-pinned") {
+		t.Fatalf("tag reference with required signature must fail closed, got %v", err)
+	}
+}
+
+func TestVerifyImageDigestAndSignature(t *testing.T) {
+	const digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	fake := &fakeExecer{responses: map[string]string{"image": `["registry.example/tool@` + digest + `"]`}}
+	sig := &recordingSignatureVerifier{}
+	if err := VerifyImage(context.Background(), fake, sig, ImageVerificationSpec{
+		Image: "registry.example/tool@" + digest, ExpectedDigest: digest, SignatureRequired: true,
+	}); err != nil {
+		t.Fatalf("valid digest and signature should pass: %v", err)
+	}
+	if sig.image != "registry.example/tool@"+digest {
+		t.Errorf("signature provider received %q", sig.image)
+	}
+}
+
+func TestVerifyImageFailsClosed(t *testing.T) {
+	const digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	cases := []struct {
+		name string
+		out  string
+		spec ImageVerificationSpec
+	}{
+		{"digest mismatch", `["registry.example/tool@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]`, ImageVerificationSpec{Image: "registry.example/tool@" + digest, ExpectedDigest: digest}},
+		{"signature requires pin", `[]`, ImageVerificationSpec{Image: "registry.example/tool:latest", SignatureRequired: true}},
+		{"signature provider missing", `["registry.example/tool@` + digest + `"]`, ImageVerificationSpec{Image: "registry.example/tool@" + digest, ExpectedDigest: digest, SignatureRequired: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeExecer{responses: map[string]string{"image": tc.out}}
+			var sig SignatureVerifier
+			if tc.name != "signature provider missing" {
+				sig = &recordingSignatureVerifier{}
+			}
+			if err := VerifyImage(context.Background(), fake, sig, tc.spec); err == nil {
+				t.Fatal("verification must fail closed")
+			}
+		})
+	}
+}
+
+func TestCosignTrustPolicyArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		v    CosignVerifier
+		want []string
+		err  string
+	}{
+		{name: "key", v: CosignVerifier{KeyRef: "C:/keys/team.pub"}, want: []string{"--key", "C:/keys/team.pub"}},
+		{name: "identity issuer", v: CosignVerifier{CertificateIdentity: "release@example.com", CertificateOIDCIssuer: "https://issuer.example"}, want: []string{"--certificate-identity", "release@example.com", "--certificate-oidc-issuer", "https://issuer.example"}},
+		{name: "missing", v: CosignVerifier{}, err: "explicit trust policy"},
+		{name: "identity without issuer", v: CosignVerifier{CertificateIdentity: "release@example.com"}, err: "must be configured together"},
+		{name: "issuer without identity", v: CosignVerifier{CertificateOIDCIssuer: "https://issuer.example"}, err: "must be configured together"},
+		{name: "mismatched policy", v: CosignVerifier{KeyRef: "team.pub", CertificateIdentity: "release@example.com", CertificateOIDCIssuer: "https://issuer.example"}, err: "cannot be combined"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.v.policyArgs()
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("policyArgs error = %v, want substring %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("policyArgs failed: %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("policyArgs = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+// recordingSignatureVerifier is deliberately only a test double; production
+// uses CosignVerifier and never treats a boolean as cryptographic evidence.
+type recordingSignatureVerifier struct{ image string }
+
+func (v *recordingSignatureVerifier) Verify(_ context.Context, image string) error {
+	v.image = image
+	return nil
 }
 
 // ------------------------------------------------------------ SanitizeName

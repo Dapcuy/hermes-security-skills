@@ -49,6 +49,8 @@ func main() {
 		err = cmdCase(os.Args[2:])
 	case "benchmark":
 		err = cmdBenchmark(os.Args[2:])
+	case "backup":
+		err = cmdBackup(os.Args[2:])
 	case "serve":
 		err = cmdServe(os.Args[2:])
 	case "help", "-h", "--help":
@@ -95,27 +97,38 @@ Commands:
                      cred add --account id --purpose p --expires RFC3339
                      (secret dari STDIN; passphrase via --passphrase-env /
                      --passphrase-file — TIDAK pernah argumen CLI)
-  knowledge          knowledge & memory pipeline (ROADMAP 27, 41):
+  knowledge          knowledge base curated (ROADMAP v3.0 §23, §61):
                      knowledge ingest <file> --category <c> --source <s>
                        --confidence <f> [--expires RFC3339]
                      knowledge list [--state s] [--category c]
                      knowledge search <query>
                      knowledge review <id> --state reviewed (human-in-the-loop)
                      knowledge stale (tandai entry >90 hari tanpa review)
-  case               case memory (ROADMAP 25, 27):
-                     case archive --case <id> (retention: arsipkan case yang
-                     entry-nya sudah expired ke memory/cases/<case>.archived)
+                     Firewall (§20/§23): entry target-controlled ditolak
+                     fail-closed — konten target hidup di evidence.
+  case               case state berbasis jobs (ROADMAP v3.0 §24):
+                     case clean <id> [--force] [--min-age 24h]
+                       [--jobs-dir dir] (dry-run tanpa --force; fail-closed)
                      case brief --case <id> (ringkasan konteks case: status
-                     workspace, approval + sisa budget, request/evidence)
+                       workspace, approval + sisa budget, request/evidence)
                      case list (daftar semua case dari jobs/ + status)
   benchmark          benchmark harness lab (ROADMAP 42, 43):
                      benchmark run --scenarios benchmarks/scenarios.json
                      [--proxy-url URL] [--scope-file f] [--out file]
+  backup             backup offline fail-closed:
+                     backup create --out backup.tar.gz [--audit-file f]
+                       [--jobs-dir d] [--evidence-dir d] [--state-dir d]
+                       [--knowledge-dir d]
+                     backup verify --archive backup.tar.gz
+                     backup restore --archive backup.tar.gz --dir restore-dir
   serve              MCP server mode (ROADMAP 4.3, 35) — JSON-RPC 2.0 over
                      stdio, enforcement in-line (scope + risk + approval);
-                     tool read-only dilayani event store dari evidence dir
+                     tool read-only dilayani event store dari evidence dir;
+                     tool pihak ketiga via Tool Registry + Docker (§36)
                      --mcp (wajib) [--proxy-url URL] [--scope-file file]
-                     [--evidence-dir dir]
+                     [--registry file] [--tool-registry file]
+                     [--tool-overrides file] [--manifest file]
+                     [--image-overrides file] [--evidence-dir dir]
 
 Common flags:
   --audit-file <path>   file audit JSONL (default audit/audit.jsonl)

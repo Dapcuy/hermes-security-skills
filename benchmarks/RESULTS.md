@@ -19,6 +19,16 @@ mesin kerja, bukan estimasi. Metrik yang belum diukur dinyatakan eksplisit.
 | Target lab | OWASP Juice Shop lokal `127.0.0.1:3000` (benchmark mode proxy), `python -m http.server` lokal (stress test) |
 | Binary yang diukur | `hermes-security`, `hermes-proxy` build dari source repo ini |
 
+Metrik agregat machine-readable sekarang mengikuti schema
+`benchmarks/metrics.schema.json` melalui field `report.metrics.measurements`.
+Collector hanya menghitung nilai yang tersedia dari `ScenarioResult` (misalnya
+`validation_success_rate`, `request_count`, dan pelanggaran scope); metrik yang
+memerlukan ground truth atau instrumentation tambahan diberi
+`status: "unmeasured"` dengan alasan. Karena itu `routing_accuracy`,
+true/false-positive rate, duplicate rate, report completeness, timeout,
+cleanup, network/policy violation, dan tool failure tidak dipresentasikan
+sebagai angka nol.
+
 ## 1. Benchmark harness — mode policy (baseline)
 
 Perintah: `hermes-security benchmark run --scenarios benchmarks/scenarios.json`

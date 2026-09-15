@@ -43,7 +43,7 @@ risk: low
 ## Required Capabilities
 
 - `openapi_analysis` — mengekstrak struktur spec: path, operation, parameter, request body schema, dan security scheme.
-- `list_history` — menyediakan traffic terekam sebagai pembanding dokumentasi versus realita.
+
 
 Keduanya read-only dan tidak mengirim traffic ke target (ROADMAP §5). Skill tidak menentukan provider — registry yang memilih, termasuk validator Docker untuk analisis spec (ROADMAP §4.1, §5).
 
@@ -118,5 +118,5 @@ Keduanya read-only dan tidak mengirim traffic ke target (ROADMAP §5). Skill tid
 
 - `api-security-methodology` — penerima peta gap untuk perencanaan.
 - `web-surface-mapping` — inventaris traffic yang saling melengkapi.
-- `http-proxy-traffic-analysis` — pembacaan history pembanding.
+- `http-traffic-analysis` — pembacaan history pembanding.
 - `engagement-scoping` — keputusan scope untuk endpoint hasil gap.

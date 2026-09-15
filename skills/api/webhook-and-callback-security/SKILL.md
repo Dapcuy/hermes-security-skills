@@ -45,7 +45,7 @@ risk: medium
 ## Required Capabilities
 
 - `request_replay` — mengirim variasi payload callback dan signature di dalam approval.
-- `list_history` — membaca pola callback terekam: header signature, urutan pengiriman, dan pengulangan.
+
 - Verifikasi HMAC dan analisis payload dilakukan secara lokal atas data terekam; capability tambahan tidak diperlukan.
 
 Skill tidak menentukan provider; replay hanya dijalankan provider proxy yang punya privilege egress (ROADMAP §4.1, §5.2, §11).
@@ -126,6 +126,6 @@ Skill tidak menentukan provider; replay hanya dijalankan provider proxy yang pun
 ## Related Skills
 
 - `ssrf-analysis` — saudara terdekat dengan aturan ketat yang sama.
-- `http-proxy-request-mutation` — mekanisme variasi payload lewat capability.
+- `http-request-mutation` — mekanisme variasi payload lewat capability.
 - `rest-api-testing` — konteks endpoint input yang menerima URL.
 - `vulnerability-validation`, `false-positive-analysis` — kontrak validasi dan triase.

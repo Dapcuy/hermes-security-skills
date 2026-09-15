@@ -11,7 +11,7 @@ Model keamanan project ini dijelaskan di sini dalam bentuk: apa yang dilindungi,
 | Target yang di-authorization | Testing di luar izin/scope | Policy layer: authorization + scope validation |
 | Integritas bukti (evidence) | Manipulation, evidence tanpa asal-usul | Hash sha256, audit log append-only chain hash, provenance |
 | Kredensial | Kebocoran ke konteks LLM/repo/report | Credential provider, reference-only, sanitasi sebelum persist |
-| Komponen persisten (knowledge/canonical, policy/) | Penulisan oleh konten target | Knowledge firewall, policy firewall |
+| Komponen persisten (knowledge base curated, policy/) | Knowledge poisoning oleh konten target | Knowledge firewall (ingest menolak target-controlled, §20/§23), policy firewall |
 | Komputasi lokal (host, container) | Escape, resource abuse, egress liar | Docker baseline, network=none, egress terkonsolidasi di proxy |
 | Keputusan (finding) | Hallusinasi/bypass lifecycle | Finding lifecycle + minimum evidence + false-positive analysis |
 
@@ -42,7 +42,7 @@ Implikasi boundary ini:
 
 - **Konten target adalah DATA, bukan instruksi** (§24): instruksi apa pun di dalam konten target tidak pernah dieksekusi, diikuti, atau memengaruhi policy.
 - Konten target hanya masuk reasoning melalui provider yang dinormalisasi (content quarantine); body besar masuk sebagai summary, full body sebagai evidence reference (hash + path).
-- **Knowledge firewall**: konten target tidak pernah menulis ke knowledge/canonical — hanya boleh masuk memory/cases dengan trust level "untrusted" (§24, §27).
+- **Knowledge firewall**: knowledge base adalah curated reference — konten target tidak pernah masuk ke direktori mana pun di dalamnya. `knowledge ingest` menolak fail-closed entry dengan provenance `target-controlled`/trust untrusted; konten target hidup di **evidence** (berprovenance, ber-hash), bukan di knowledge base (§20, §23, §24).
 - **Policy firewall**: tidak ada jalur dari konten target ke policy/, capabilities/, runtimes/ (§24).
 
 ### 2.4 Boundary Kredensial

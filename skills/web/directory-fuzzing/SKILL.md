@@ -2,7 +2,7 @@
 name: directory-fuzzing
 description: >
   Use when an in-scope web root or path prefix needs controlled directory
-  and file discovery through the ffuf_fuzz capability: a wordlist baked
+  and file discovery through the endpoint_discovery capability: a wordlist baked
   into the curated tool image, low concurrency, status/size response
   filtering to separate real hits from blanket 404s, and automatic stops
   on rate limiting.
@@ -14,7 +14,7 @@ risk: medium
 
 ## Purpose
 
-- Menemukan path, direktori, dan file yang tidak tertaut di permukaan aplikasi melalui capability `ffuf_fuzz` atas prefix in-scope, dengan disiplin volume yang ketat.
+- Menemukan path, direktori, dan file yang tidak tertaut di permukaan aplikasi melalui capability `endpoint_discovery` atas prefix in-scope, dengan disiplin volume yang ketat.
 - Menjaga fuzzing tetap terkendali: wordlist ter-bake di image terkurasi, concurrency rendah, dan budget/rate limit dipaksa oleh wrapper image (ROADMAP §13.1, §22) — bukan run sebesar apa pun yang muat.
 - Memisahkan hit nyata dari noise: filter status code dan ukuran respons untuk menyingkirkan 404 blanket dan halaman generik.
 - Menghasilkan daftar path kandidat berkaidah untuk memperkaya web-surface-mapping dan hypothesis management, bukan daftar mentah berukuran ribuan.
@@ -50,7 +50,7 @@ risk: medium
 
 ## Required Capabilities
 
-- `ffuf_fuzz` — enumerasi path/direktori atas prefix in-scope; wrapper image menegakkan budget, rate limit, dan concurrency dari execution plan (ROADMAP §13.1).
+- `endpoint_discovery` — enumerasi path/direktori atas prefix in-scope; wrapper image menegakkan budget, rate limit, dan concurrency dari execution plan (ROADMAP §13.1).
 - Eksekusi hanya pada provider docker sesuai registry (ROADMAP §4.1); parameter di luar policy ditolak fail-closed, bukan dicoba jalur lain (ROADMAP §5.1).
 - Interpretasi hasil (hit vs noise, sensitivity filter) adalah reasoning Hermes atas output capability — hasil tool adalah observation (ROADMAP §17, §26).
 
@@ -66,14 +66,14 @@ risk: medium
 
 1. Kunci host dan prefix in-scope dari approval; ambil baseline respons untuk path yang diketahui tidak ada (acak, bukan wordlist).
 2. Pilih kategori wordlist ter-bake yang paling kecil yang menjawab hypothesis; konfirmasi budget approval mencukupi jumlah entri.
-3. Jalankan `ffuf_fuzz` dengan concurrency rendah dan rate dari execution plan; pantau sinyal beban dari target.
+3. Jalankan `endpoint_discovery` dengan concurrency rendah dan rate dari execution plan; pantau sinyal beban dari target.
 4. Terapkan filter status/size terhadap baseline: kelompokkan hasil menjadi hit, kandidat, dan noise; hitung proporsi noise untuk menguji kualitas filter.
 5. Susun daftar kandidat berkaidah (path, status, ukuran, waktu) dan tandai yang menonjol (backup, panel, file konfigurasi).
 6. Simpan hasil di case memory, perbarui inventaris di web-surface-mapping, dan rutekan kandidat menonjol ke skill analisis yang relevan.
 
 ## Allowed Operations
 
-- Menjalankan `ffuf_fuzz` atas host/prefix yang disetujui approval, dengan wordlist ter-bake, concurrency rendah, dan total di dalam budget.
+- Menjalankan `endpoint_discovery` atas host/prefix yang disetujui approval, dengan wordlist ter-bake, concurrency rendah, dan total di dalam budget.
 - Menghentikan run lebih awal kapan pun sinyal stop muncul atau hasil sudah cukup.
 - Mengulang baseline untuk memvalidasi filter, dihitung dalam budget.
 - Menyimpan dan menata hasil sebagai kandidat path berkaidah di case memory.

@@ -1,0 +1,50 @@
+# Production profile: proxy control channel is internal-only.
+# Set HERMES_PROXY_IMAGE to a fully-qualified GHCR digest reference before use:
+#   HERMES_PROXY_IMAGE=ghcr.io/org/hermes-proxy@sha256:<64-lowercase-hex> docker compose -f deploy/compose/production.yaml up
+# No public ports are published by this profile.
+services:
+  hermes-proxy:
+    image: ${HERMES_PROXY_IMAGE:?HERMES_PROXY_IMAGE must be an immutable digest reference}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    command: ["--bind", "all", "--addr", "0.0.0.0:8080", "--bundle", "/run/policy/bundle.json", "--bundle-sha256", "${HERMES_BUNDLE_SHA256:?HERMES_BUNDLE_SHA256 is required}", "--evidence-dir", "/var/lib/hermes/evidence"]
+    healthcheck:
+      test: ["CMD", "/hermes-proxy", "--healthcheck", "--healthcheck-addr", "127.0.0.1:8080"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    expose: ["8080"]
+    networks:
+      - control
+      - egress
+    volumes:
+      - type: bind
+        source: ${HERMES_POLICY_DIR:?HERMES_POLICY_DIR is required}
+        target: /run/policy
+        read_only: true
+      - hermes-evidence:/var/lib/hermes/evidence
+
+networks:
+  control:
+    name: hermes-control
+    internal: true
+  egress:
+    driver: bridge
+
+volumes:
+  hermes-evidence:
+    name: hermes-evidence

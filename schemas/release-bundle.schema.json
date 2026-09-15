@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hermes immutable release bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "repository", "commit", "images"],
+  "properties": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$"},
+    "repository": {"type": "string", "minLength": 1},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "images": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image", "digest", "sbom", "cosign_oidc_issuer", "cosign_certificate_identity", "repository", "commit", "version"],
+        "properties": {
+          "image": {"type": "string", "pattern": "^ghcr\\.io/[a-z0-9_.-]+/[a-z0-9_.-]+$"},
+          "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "sbom": {"type": "string", "pattern": "^sbom-[a-z0-9-]+\\.spdx\\.json$"},
+          "cosign_oidc_issuer": {"const": "https://token.actions.githubusercontent.com"},
+          "cosign_certificate_identity": {"type": "string", "pattern": "^https://github\\.com/.+/.+/.github/workflows/images\\.yml@refs/tags/.+$"},
+          "repository": {"type": "string", "minLength": 1},
+          "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+          "version": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

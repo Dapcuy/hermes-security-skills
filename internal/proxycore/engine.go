@@ -445,10 +445,12 @@ func (hr *hopResponse) locationFor(base *url.URL) (*url.URL, error) {
 // nextHop menyiapkan request redirect berikutnya. Semantik mengikuti praktik
 // umum client HTTP: 301/302/303 dengan method non-GET/HEAD dikonversi ke GET
 // dan body dibuang; 307/308 mempertahankan method dan body. Bila redirect
-// pindah host, header kredensial sensitif dibuang agar tidak bocor ke host lain.
+// pindah origin (scheme atau host), header kredensial sensitif dibuang agar
+// tidak bocor ke host lain atau turun dari HTTPS ke HTTP.
 func nextHop(cur hop, hr *hopResponse, loc *url.URL) hop {
 	n := hop{method: cur.method, url: loc, headers: cur.headers.Clone(), body: cur.body}
-	if loc.Host != cur.url.Host {
+	if !strings.EqualFold(loc.Scheme, cur.url.Scheme) ||
+		!strings.EqualFold(loc.Host, cur.url.Host) {
 		for name := range n.headers {
 			if isSensitiveHeader(name) {
 				n.headers.Del(name)

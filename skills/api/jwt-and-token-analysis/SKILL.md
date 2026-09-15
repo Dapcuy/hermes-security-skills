@@ -47,7 +47,7 @@ requires_credentials: true
 
 - `request_replay` — menjalankan variasi token (invalid, expired, mismatched) di dalam approval scoped.
 - `response_comparison` — membandingkan respons token valid versus variasi untuk membaca perilaku validasi server.
-- `list_history` — menarik sampel request bertoken dan memetakan pola pemakaian lintas endpoint.
+
 
 ## Required Credentials
 
@@ -132,7 +132,7 @@ requires_credentials: true
 ## Related Skills
 
 - `web-authentication` — pemahaman mekanisme sesi di hulu.
-- `http-proxy-auth-flow-analysis` — pemetaan alur login/refresh/logout dari history.
+- `http-auth-flow-analysis` — pemetaan alur login/refresh/logout dari history.
 - `idor-and-bola` — pengujian lintas akun (di luar wilayah skill ini).
 - `api-rate-limit-analysis` — friksi percobaan pada endpoint refresh dan OTP.
 - `vulnerability-validation`, `false-positive-analysis` — kontrak validasi dan triase.

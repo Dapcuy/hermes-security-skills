@@ -861,8 +861,8 @@ func cmdAbort(args []string) error {
 	if revokeErr != nil {
 		fmt.Printf("  [peringatan] revoke approval gagal: %v\n", revokeErr)
 	}
-	// TODO(execution-queue): hentikan queue execution plan yang bergantung
-	// pada case ini (§10).
-	// TODO(memory): tandai case aborted di memory/cases (§10).
-	return dockerErr
+	// Marker dan audit adalah jaminan utama kill switch. Kegagalan Docker atau
+	// revoke sudah dilaporkan sebagai warning; caller tetap mendapat sukses
+	// setelah state ABORTED durable sehingga task baru ditolak fail-closed.
+	return nil
 }

@@ -4,53 +4,55 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"hermes-security-skills/internal/memory"
+	"hermes-security-skills/internal/jobs"
+	"hermes-security-skills/internal/knowledge"
+	"hermes-security-skills/internal/recovery"
 )
 
-// Subcommand knowledge & case (ROADMAP §27, §41 — Phase 10):
+// Subcommand knowledge & case (ROADMAP v3.0 §20, §23, §24, §61 — Phase 11):
 //
 //	knowledge ingest <file> --category <c> --source <s> --confidence <f>
 //	knowledge list   [--state s] [--category c]
 //	knowledge search <query>
-//	knowledge review <id> --state reviewed     (human-in-the-loop, §27)
+//	knowledge review <id> --state reviewed     (human-in-the-loop, §23)
 //	knowledge stale                            (MarkStale, report)
-//	case archive --case <id>                   (retention, §25)
+//	case clean <id> [--force] [--jobs-dir dir] (jobs cleanup — case
+//	                                           retention §25, bukan memory)
 //
-// Implementasi case brief/list ada di casebrief.go (memory diperkuat).
+// Sejak ROADMAP v3.0 memory DIHAPUS sebagai komponen (§24 Why Skill >
+// Memory): state kasus hidup di evidence + jobs + approval + events.
+// Knowledge base adalah curated reference — BUKAN memori agent.
 //
-// Semua operasi menulis audit entry (§35). Penyimpanan berada di
-// knowledge/ (canonical|proposed|reviewed) dan memory/cases/<caseID>.
-// Konten target HANYA bisa masuk lewat jalur programatik
-// memory.Store.IngestFromTarget — tidak ada perintah CLI yang
-// mengeksposnya (knowledge firewall §24).
+// Knowledge firewall (§20, §23): konten target-controlled tidak boleh masuk
+// knowledge base — ingest menolaknya fail-closed (konten target hidup di
+// evidence). Tidak ada perintah CLI maupun jalur programatik yang
+// mengekspos konten target ke knowledge base.
+//
+// Implementasi case brief/list ada di casebrief.go (berbasis jobs +
+// approval + events).
 
-const (
-	defaultKnowledgeDir = "knowledge"
-	defaultMemoryDir    = "memory"
-)
+const defaultKnowledgeDir = "knowledge"
 
 // knowledgeFlags: flag bersama subcommand knowledge.
 type knowledgeFlags struct {
 	knowledgeDir *string
-	memoryDir    *string
 	auditFile    *string
 }
 
 func parseKnowledgeFlags(fs *flag.FlagSet) *knowledgeFlags {
-	kf := &knowledgeFlags{
+	return &knowledgeFlags{
 		knowledgeDir: fs.String("knowledge-dir", defaultKnowledgeDir, "root direktori knowledge base"),
-		memoryDir:    fs.String("memory-dir", defaultMemoryDir, "root direktori memory (cases di bawahnya)"),
 		auditFile:    auditFlag(fs),
 	}
-	return kf
 }
 
-func (kf *knowledgeFlags) store() *memory.Store {
-	return memory.NewStore(*kf.knowledgeDir, *kf.memoryDir)
+func (kf *knowledgeFlags) store() *knowledge.Store {
+	return knowledge.NewStore(*kf.knowledgeDir)
 }
 
 // parseMixedArgs memisahkan argumen posisional dari flag lalu mem-parse
@@ -133,7 +135,7 @@ func knowledgeIngest(args []string) error {
 	if *confidence > 1 {
 		return fmt.Errorf("knowledge ingest: --confidence harus di rentang 0..1")
 	}
-	meta := memory.IngestMeta{Category: *category, Source: *source}
+	meta := knowledge.IngestMeta{Category: *category, Source: *source}
 	if *confidence >= 0 {
 		meta.Confidence = confidence
 	}
@@ -155,7 +157,7 @@ func knowledgeIngest(args []string) error {
 	fmt.Printf("knowledge ingest: OK\n")
 	fmt.Printf("  id          : %s\n", e.ID)
 	fmt.Printf("  title       : %s\n", e.Title)
-	fmt.Printf("  state       : %s (knowledge/proposed — menunggu review, §27)\n", e.State)
+	fmt.Printf("  state       : %s (knowledge/research — menunggu review, §23)\n", e.State)
 	fmt.Printf("  confidence  : %.2f\n", e.Confidence)
 	return writeAudit(*kf.auditFile, "knowledge_ingest", map[string]any{
 		"id": e.ID, "category": e.Category, "source": e.Source,
@@ -174,12 +176,12 @@ func knowledgeList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	f := memory.Filter{}
+	f := knowledge.Filter{}
 	if strings.TrimSpace(*state) != "" {
-		if !memory.ValidState(memory.State(*state)) {
+		if !knowledge.ValidState(knowledge.State(*state)) {
 			return fmt.Errorf("knowledge list: state %q tidak dikenal", *state)
 		}
-		f.State = memory.State(*state)
+		f.State = knowledge.State(*state)
 	}
 	f.Category = strings.TrimSpace(*category)
 	entries, err := kf.store().List(f)
@@ -245,10 +247,10 @@ func knowledgeReview(args []string) error {
 		return fmt.Errorf("knowledge review: butuh tepat satu id entry")
 	}
 	if strings.TrimSpace(*target) == "" {
-		return fmt.Errorf("knowledge review: --state wajib diisi (human-in-the-loop, §27)")
+		return fmt.Errorf("knowledge review: --state wajib diisi (human-in-the-loop, §23)")
 	}
-	newState := memory.State(*target)
-	if !memory.ValidState(newState) {
+	newState := knowledge.State(*target)
+	if !knowledge.ValidState(newState) {
 		return fmt.Errorf("knowledge review: state %q tidak dikenal", *target)
 	}
 	before, err := kf.store().Get(positional[0])
@@ -283,8 +285,8 @@ func knowledgeStale(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("knowledge stale: %d entry ditandai stale (ambang %d hari, §41)\n",
-		len(marked), int(memory.MarkStaleHorizon().Hours()/24))
+	fmt.Printf("knowledge stale: %d entry ditandai stale (ambang %d hari, §61)\n",
+		len(marked), int(knowledge.MarkStaleHorizon().Hours()/24))
 	for _, id := range marked {
 		fmt.Printf("  - %s\n", id)
 	}
@@ -293,58 +295,148 @@ func knowledgeStale(args []string) error {
 	})
 }
 
-// ------------------------------------------------------------------ case archive
+// ------------------------------------------------------------------ case clean
 
 func cmdCase(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("case: butuh subcommand (archive|brief|list)")
+		return fmt.Errorf("case: butuh subcommand (clean|brief|list)")
 	}
 	switch args[0] {
-	case "archive":
-		return caseArchive(args[1:])
+	case "clean":
+		return caseClean(args[1:])
 	case "brief":
 		return caseBriefCmd(args[1:])
 	case "list":
 		return caseListCmd(args[1:])
 	default:
-		return fmt.Errorf("case: subcommand tidak dikenal %q (archive|brief|list)", args[0])
+		return fmt.Errorf("case: subcommand tidak dikenal %q (clean|brief|list)", args[0])
 	}
 }
 
-// caseArchive memproses retention policy satu case (§25): entry yang
-// expires_at-nya lewat diarsipkan; bila semua sudah archived, direktori
-// case dipindah ke memory/cases/<caseID>.archived.
-func caseArchive(args []string) error {
-	fs := newFlagSet("case archive")
-	caseID := fs.String("case", "", "case id yang diarsipkan (wajib)")
-	memoryDir := fs.String("memory-dir", defaultMemoryDir, "root direktori memory")
+// caseClean menghapus workspace jobs/<caseID> (case retention §25 — sejak
+// v3.0 retention kasus adalah jobs cleanup, BUKAN memory): state kasus
+// hidup di jobs/, dan pembersihannya berarti menghapus workspace tersebut.
+//
+// Fail-closed secara default: TANPA --force command hanya MENAMPILKAN isi
+// yang akan dihapus lalu error (dry-run) — tidak ada penghapusan diam-diam.
+// Dengan --force, direktori jobs/<caseID> dihapus hanya jika memenuhi
+// minimum age dan seluruh top-level entry masuk allowlist.
+//
+// Yang TIDAK disentuh (jejak audit tetap utuh):
+//   - audit log (append-only);
+//   - approval store (approval expired/revoked oleh policy-nya sendiri);
+//   - event index / evidence yang berada di luar jobs/<caseID>.
+func caseClean(args []string) error {
+	fs := newFlagSet("case clean")
+	jobsDir := fs.String("jobs-dir", defaultJobsDir, "root direktori jobs")
+	force := fs.Bool("force", false, "wajib untuk benar-benar menghapus (tanpa ini = dry-run)")
+	minAge := fs.Duration("min-age", 24*time.Hour, "umur minimum case sebelum cleanup (mis. 24h; 0s untuk override eksplisit)")
 	auditFile := auditFlag(fs)
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if strings.TrimSpace(*caseID) == "" {
-		return fmt.Errorf("case archive: --case wajib diisi")
-	}
-	res, err := memory.NewStore(defaultKnowledgeDir, *memoryDir).Retention(*caseID, time.Now().UTC())
+	positional, err := parseMixedArgs(fs, args)
 	if err != nil {
-		_ = writeAudit(*auditFile, "case_archive", map[string]any{
-			"case": *caseID, "result": "error", "error": err.Error(),
-		})
 		return err
 	}
-	fmt.Printf("case archive: %s\n", res.CaseID)
-	fmt.Printf("  entry diarsipkan : %d %v\n", len(res.ArchivedEntries), res.ArchivedEntries)
-	fmt.Printf("  entry tersisa    : %d %v\n", len(res.Remaining), res.Remaining)
-	if res.CaseArchived {
-		fmt.Printf("  direktori case   : %s (semua entry expired, §25)\n", filepathToSlash(res.ArchivedPath))
-	} else {
-		fmt.Println("  direktori case   : masih aktif (ada entry yang belum expired)")
+	if len(positional) != 1 {
+		return fmt.Errorf("case clean: butuh tepat satu case id")
 	}
-	return writeAudit(*auditFile, "case_archive", map[string]any{
-		"case": res.CaseID, "archived_entries": res.ArchivedEntries,
-		"remaining": res.Remaining, "case_archived": res.CaseArchived,
-		"archived_path": filepathToSlash(res.ArchivedPath), "result": "ok",
+	caseID := positional[0]
+	if !jobs.ValidID(caseID) {
+		return fmt.Errorf("case clean: case id %q tidak valid (huruf/angka/._- , maks 64)", caseID)
+	}
+	caseDir := filepath.Join(*jobsDir, caseID)
+	info, err := os.Stat(caseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("case clean: case %q tidak ditemukan (tidak ada %s)", caseID, filepathToSlash(caseDir))
+		}
+		return fmt.Errorf("case clean: stat %s: %w", caseDir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("case clean: %s bukan direktori case", filepathToSlash(caseDir))
+	}
+	// Validasi retention dilakukan sebelum dry-run maupun delete: case muda,
+	// symlink, dan entry asing harus selalu ditolak fail-closed.
+	entries, err := os.ReadDir(caseDir)
+	if err != nil {
+		return fmt.Errorf("case clean: scan entries %s: %w", caseDir, err)
+	}
+	aborted := false
+	if markerInfo, markerErr := os.Stat(filepath.Join(caseDir, jobs.AbortedFile)); markerErr == nil {
+		aborted = !markerInfo.IsDir()
+	}
+	allowed := []string{jobs.AbortedFile}
+	for _, entry := range entries {
+		if entry.Name() == jobs.AbortedFile {
+			continue
+		}
+		if !jobs.ValidID(entry.Name()) || !validRetentionWorkspace(filepath.Join(caseDir, entry.Name()), aborted) {
+			return fmt.Errorf("case clean: entry %q tidak diizinkan oleh retention policy", entry.Name())
+		}
+		allowed = append(allowed, entry.Name())
+	}
+	files, size, err := recovery.ValidateCase(caseDir, recovery.RetentionPolicy{
+		MinAge: *minAge, AllowedNames: allowed,
+	}, time.Now().UTC())
+	if err != nil {
+		_ = writeAudit(*auditFile, "case_clean", map[string]any{
+			"case": caseID, "jobs_dir": filepathToSlash(*jobsDir),
+			"forced": *force, "result": "rejected", "error": err.Error(),
+		})
+		return fmt.Errorf("case clean: retention policy: %w", err)
+	}
+	if !*force {
+		// Dry-run: tampilkan apa yang akan dihapus, lalu gagal (fail-closed —
+		// penghapusan butuh konfirmasi eksplisit --force).
+		fmt.Printf("case clean (dry-run): %s\n", filepathToSlash(caseDir))
+		fmt.Printf("  file           : %d (%d bytes)\n", files, size)
+		fmt.Println("  tidak ada yang dihapus — tambahkan --force untuk menghapus")
+		_ = writeAudit(*auditFile, "case_clean", map[string]any{
+			"case": caseID, "jobs_dir": filepathToSlash(*jobsDir),
+			"files": files, "bytes": size, "forced": false, "result": "dry-run",
+		})
+		return fmt.Errorf("case clean: penghapusan butuh konfirmasi --force")
+	}
+	if err := recovery.CleanupCase(caseDir, recovery.RetentionPolicy{
+		MinAge: *minAge, AllowedNames: allowed,
+	}, time.Now().UTC()); err != nil {
+		_ = writeAudit(*auditFile, "case_clean", map[string]any{
+			"case": caseID, "jobs_dir": filepathToSlash(*jobsDir),
+			"result": "error", "error": err.Error(),
+		})
+		return fmt.Errorf("case clean: retention cleanup %s: %w", filepathToSlash(caseDir), err)
+	}
+	if err := os.Remove(caseDir); err != nil {
+		_ = writeAudit(*auditFile, "case_clean", map[string]any{
+			"case": caseID, "jobs_dir": filepathToSlash(*jobsDir),
+			"result": "error", "error": err.Error(),
+		})
+		return fmt.Errorf("case clean: remove empty case directory %s: %w", filepathToSlash(caseDir), err)
+	}
+	fmt.Printf("case clean: %s dihapus\n", filepathToSlash(caseDir))
+	fmt.Printf("  file dihapus   : %d (%d bytes)\n", files, size)
+	fmt.Println("  audit/approval : tidak disentuh (jejak audit tetap utuh)")
+	return writeAudit(*auditFile, "case_clean", map[string]any{
+		"case": caseID, "jobs_dir": filepathToSlash(*jobsDir),
+		"files": files, "bytes": size, "forced": true, "result": "ok",
 	})
+}
+
+func validRetentionWorkspace(dir string, aborted bool) bool {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	for _, name := range []string{"input", "output", "artifacts", "logs"} {
+		child, err := os.Lstat(filepath.Join(dir, name))
+		if err != nil || !child.IsDir() || child.Mode()&os.ModeSymlink != 0 {
+			return false
+		}
+	}
+	if aborted {
+		return true
+	}
+	result, err := os.Lstat(filepath.Join(dir, "output", jobs.ResultFile))
+	return err == nil && result.Mode().IsRegular() && result.Mode()&os.ModeSymlink == 0
 }
 
 // truncateRunes memotong string pada batas rune untuk output tabel.

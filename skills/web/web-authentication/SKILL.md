@@ -40,14 +40,14 @@ requires_credentials: true
 
 ## Required Context
 
-- Alur login/logout/refresh yang terekam di history, dari web-surface-mapping atau http-proxy-traffic-analysis.
+- Alur login/logout/refresh yang terekam di history, dari web-surface-mapping atau http-traffic-analysis.
 - Credential reference yang sah, mis. `account-a`, `account-b`.
 - Indikasi mekanisme sesi dari history: nama cookie sesi (tanpa nilainya), header otorisasi bertipe bearer, redirect IdP.
 - Batasan program: kebijakan lockout, batas pengujian akun, larangan khusus.
 
 ## Required Capabilities
 
-- `list_history` — menarik alur authentication yang sudah terekam sebagai baseline.
+
 - `inspect_request` — membedah request authenticated: struktur sesi, header, dan cookie fungsional tanpa nilainya.
 - `request_replay` — menjalankan pengujian lifecycle (mis. replay request setelah logout) di dalam approval aktif.
 - `response_comparison` — membandingkan respons sebelum dan sesudah peristiwa sesi (logout, refresh, rotasi).
@@ -140,5 +140,5 @@ Skill tidak menentukan provider; capability berjaringan hanya dijalankan provide
 - `web-authorization` — lanjutan alami: setelah mekanisme sesi dipahami, uji kontrol aksesnya.
 - `idor-and-bola` — pengujian object-level dengan multi-akun.
 - `jwt-and-token-analysis` — bila mekanisme sesinya berbasis token terstruktur.
-- `http-proxy-request-replay`, `http-proxy-response-comparison` — operasi replay dan compare yang dipakai skill ini.
+- `http-request-replay`, `http-response-comparison` — operasi replay dan compare yang dipakai skill ini.
 - `vulnerability-validation` — kontrak umum validasi hypothesis.

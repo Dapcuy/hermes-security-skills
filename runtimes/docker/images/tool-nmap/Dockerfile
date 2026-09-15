@@ -29,7 +29,7 @@ ARG NMAP_VERSION=7.93+dfsg1-1
 # Stage 1 — build wrapper fail-closed (module kecil terpisah, stdlib only).
 # Wrapper di-build dari source di runtimes/docker/images/tool-nmap/wrapper.
 # -----------------------------------------------------------------------------
-FROM golang:1.25 AS build
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
 # TARGETARCH di-set otomatis oleh buildx; kosong = fallback arsitektur host.
 ARG TARGETARCH
 WORKDIR /wrapper-src
@@ -43,7 +43,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 # §14 — digest pinning saat publish:
 #   FROM debian:bookworm-slim@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
 ARG NMAP_VERSION
 
 # Install nmap TER-PIN versi saat build (§13.1: install saat build, bukan
@@ -55,6 +55,7 @@ ARG NMAP_VERSION
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       nmap="${NMAP_VERSION}" \
+      libpcre2-8-0=10.42-1+deb12u1 \
  && rm -rf /var/lib/apt/lists/* \
  && [ "$(dpkg-query -W -f='${Version}' nmap)" = "${NMAP_VERSION}" ] \
  || { echo "FAIL: versi nmap ter-install tidak sama dengan pin: ${NMAP_VERSION}"; exit 1; }

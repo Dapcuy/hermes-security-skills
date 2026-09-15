@@ -43,6 +43,15 @@ func (img Image) Ref() string {
 	return img.Name + ":" + img.Tag
 }
 
+func (m *Manifest) ref(img Image) string {
+	ref := img.Ref()
+	reg := strings.TrimSuffix(strings.TrimSpace(m.Registry), "/")
+	if reg == "" || strings.Contains(reg, "<owner>") {
+		return ref
+	}
+	return reg + "/" + ref
+}
+
 // Manifest manifest image yang sudah divalidasi.
 type Manifest struct {
 	Registry string
@@ -179,7 +188,7 @@ func (m *Manifest) Resolve(validatorID string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("registry: validator/image %q tidak dikenal di manifest (fail-closed, §21)", validatorID)
 	}
-	return m.Images[idx].Ref(), nil
+	return m.ref(m.Images[idx]), nil
 }
 
 // ImageOf mengembalikan entri manifest untuk sebuah image name (audit).

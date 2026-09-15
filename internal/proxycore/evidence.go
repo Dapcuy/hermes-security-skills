@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -72,7 +73,19 @@ func NewEvidenceStore(dir string) (*EvidenceStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("proxycore: siapkan evidence dir %s: %w", dir, err)
 	}
-	return &EvidenceStore{dir: dir}, nil
+	var seq int64
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("proxycore: baca evidence dir %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		var n int64
+		parsed, _ := fmt.Sscanf(entry.Name(), "evidence-%d.json", &n)
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "evidence-") && strings.HasSuffix(entry.Name(), ".json") && parsed == 1 && n > seq {
+			seq = n
+		}
+	}
+	return &EvidenceStore{dir: dir, seq: seq}, nil
 }
 
 // Dir mengembalikan path direktori evidence.
@@ -105,9 +118,31 @@ func (s *EvidenceStore) Write(rec EvidenceRecord) (ref, sha string, err error) {
 	}
 	name := fmt.Sprintf("evidence-%06d.json", seq)
 	path := filepath.Join(s.dir, name)
-	// 0600: evidence boleh memuat konten target; akses seminimal mungkin.
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return "", "", fmt.Errorf("proxycore: tulis evidence %s: %w", path, err)
+	// Atomic persistence: write, sync, close, then rename. A crash cannot
+	// expose a partially-written evidence JSON at its final name.
+	tmp, err := os.CreateTemp(s.dir, ".evidence-*.tmp")
+	if err != nil {
+		return "", "", fmt.Errorf("proxycore: siapkan evidence temp: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return "", "", fmt.Errorf("proxycore: mode evidence temp: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return "", "", fmt.Errorf("proxycore: tulis evidence temp: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return "", "", fmt.Errorf("proxycore: sync evidence: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return "", "", fmt.Errorf("proxycore: tutup evidence temp: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return "", "", fmt.Errorf("proxycore: commit evidence %s: %w", path, err)
 	}
 	return name, hex.EncodeToString(sum[:]), nil
 }

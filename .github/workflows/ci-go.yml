@@ -9,26 +9,32 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/ci-go.yml"
+      - "benchmarks/**"
   pull_request:
     paths:
       - "**.go"
       - "go.mod"
       - "go.sum"
       - ".github/workflows/ci-go.yml"
+      - "benchmarks/**"
 
 permissions:
   contents: read
 
 jobs:
   go-build-test:
-    name: go build / test / vet (control plane)
-    runs-on: ubuntu-latest
+    name: go build / test / vet (control plane, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Setup Go 1.23
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version: "1.23"
 
@@ -51,10 +57,10 @@ jobs:
         working-directory: runtimes/docker/images/tool-nuclei/wrapper
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Setup Go 1.23
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version: "1.23"
 
@@ -66,3 +72,29 @@ jobs:
 
       - name: Test wrapper (go test ./...)
         run: go test ./...
+
+  go-race:
+    name: go test -race (trusted computing base)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup Go 1.23
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.23"
+
+      - name: Race test control plane
+        run: go test -race ./...
+
+      - name: Race test tool wrappers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in runtimes/docker/images/*/wrapper; do
+            if [[ -f "$dir/go.mod" ]]; then
+              echo "== race testing $dir =="
+              (cd "$dir" && go test -race ./...)
+            fi
+          done

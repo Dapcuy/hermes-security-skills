@@ -46,7 +46,7 @@ requires_credentials: true
 
 ## Required Capabilities
 
-- `list_history` — mengumpulkan baseline request akun A yang memuat object reference.
+
 - `request_replay` — menjalankan ulang request yang sama dengan identitas akun B melalui proxy.
 - `response_comparison` — membandingkan respons akun A versus akun B untuk menilai akses object.
 
@@ -135,5 +135,5 @@ Skill tidak menentukan provider; replay hanya berjalan di provider proxy (ROADMA
 - `web-authorization` — kerangka matrix peran yang lebih luas.
 - `bfla` — pengujian pada level fungsi, bukan object.
 - `multi-tenant-isolation` — varian untuk batas tenant.
-- `http-proxy-request-replay`, `http-proxy-response-comparison` — operasi inti yang dipakai.
+- `http-request-replay`, `http-response-comparison` — operasi inti yang dipakai.
 - `false-positive-analysis` — triase sebelum status `reproduced`.

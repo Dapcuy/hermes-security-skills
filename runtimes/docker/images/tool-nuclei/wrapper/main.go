@@ -3,23 +3,23 @@
 //
 // Tanggung jawab wrapper (urutan eksekusi):
 //
-//	1. Verifikasi policy bundle — SHA-256 file bundle harus sama dengan
-//	   env POLICY_BUNDLE_SHA256. Fail-closed: env hilang, file hilang,
-//	   atau hash mismatch = REJECT, nuclei tidak pernah dieksekusi.
-//	2. Terapkan budget sederhana dari bundle — max_requests dan
-//	   rate_limit_rps di-map ke flag -rate-limit nuclei dan ke deadline
-//	   eksekusi (max_requests / rate_limit_rps + grace); lewat deadline,
-//	   nuclei di-kill (stop condition "request budget habis", §10).
-//	3. Eksekusi nuclei sebagai subprocess dengan argumen TERBATAS —
-//	   target dari argumen posisional wrapper (diteruskan ke nuclei
-//	   sebagai -target; nuclei tidak menerima target posisional),
-//	   -t <path templates ter-bake>, -rate-limit dari bundle, -duc
-//	   (disable update check, lihat peringatan template di bawah),
-//	   -jsonl, -o output file. Tidak ada pass-through argumen mentah;
-//	   tidak ada shell (os/exec langsung → tidak bisa argumen injection).
-//	4. Parse output JSON minimal → tulis validation-result.json dengan
-//	   status "observed" + provenance (§13.1: tanpa langkah ini, output
-//	   tool jadi finding ilegal yang membypass finding lifecycle §26).
+//  1. Verifikasi policy bundle — SHA-256 file bundle harus sama dengan
+//     env POLICY_BUNDLE_SHA256. Fail-closed: env hilang, file hilang,
+//     atau hash mismatch = REJECT, nuclei tidak pernah dieksekusi.
+//  2. Terapkan budget sederhana dari bundle — max_requests dan
+//     rate_limit_rps di-map ke flag -rate-limit nuclei dan ke deadline
+//     eksekusi (max_requests / rate_limit_rps + grace); lewat deadline,
+//     nuclei di-kill (stop condition "request budget habis", §10).
+//  3. Eksekusi nuclei sebagai subprocess dengan argumen TERBATAS —
+//     target dari argumen posisional wrapper (diteruskan ke nuclei
+//     sebagai -target; nuclei tidak menerima target posisional),
+//     -t <path templates ter-bake>, -rate-limit dari bundle, -duc
+//     (disable update check, lihat peringatan template di bawah),
+//     -jsonl, -o output file. Tidak ada pass-through argumen mentah;
+//     tidak ada shell (os/exec langsung → tidak bisa argumen injection).
+//  4. Parse output JSON minimal → tulis validation-result.json dengan
+//     status "observed" + provenance (§13.1: tanpa langkah ini, output
+//     tool jadi finding ilegal yang membypass finding lifecycle §26).
 //
 // PERINGATAN TEMPLATE PINNING (§13.1): nuclei templates adalah supply chain
 // vector. Template DI-BAKE ke image saat build pada tag terpin
@@ -63,7 +63,7 @@ const (
 	// HARUS sama dengan pin di runtimes/docker/images/tool-nuclei/Dockerfile —
 	// ganti keduanya bersamaan.
 	toolName    = "nuclei"
-	toolVersion = "v3.3.9"
+	toolVersion = "v3.11.1"
 
 	// envBundleSHA256 menyimpan hex SHA-256 yang diharapkan untuk file
 	// policy bundle (di-set oleh control plane saat menjalankan container).
@@ -402,7 +402,7 @@ func run() int {
 		"-target", target,
 		"-t", *templatesDir, // template ter-bake — tidak ada download runtime (§13.1)
 		"-rate-limit", fmt.Sprintf("%d", bundle.RateLimitRPS),
-		"-duc", // disable update check — template tidak pernah di-update saat runtime (§13.1)
+		"-duc",   // disable update check — template tidak pernah di-update saat runtime (§13.1)
 		"-jsonl", // output JSONL (flag -json dihapus sejak nuclei v3.3)
 		"-o", rawOutPath,
 	}

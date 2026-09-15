@@ -24,11 +24,11 @@ import (
 // mustRequest) agar bentuk JSON-nya bebas.
 var fuzzParams = []string{
 	// arguments berisi field ekstra aneh (prototype pollution style).
-	`{"name":"json_diff","arguments":{"json_a":1,"json_b":2,"__proto__":{"isAdmin":true},"constructor":"x","hasOwnProperty":1}}`,
+	`{"name":"security.json_diff","arguments":{"json_a":1,"json_b":2,"__proto__":{"isAdmin":true},"constructor":"x","hasOwnProperty":1}}`,
 	// arguments berupa array, bukan object.
-	`{"name":"json_diff","arguments":[1,2,3]}`,
+	`{"name":"security.json_diff","arguments":[1,2,3]}`,
 	// arguments null.
-	`{"name":"json_diff","arguments":null}`,
+	`{"name":"security.json_diff","arguments":null}`,
 	// name bukan string.
 	`{"name":123,"arguments":{}}`,
 	`{"name":{"$gt":""},"arguments":{}}`,
@@ -36,11 +36,11 @@ var fuzzParams = []string{
 	`{"name":"   ","arguments":{}}`,
 	// name dengan unicode escapes dan karakter kontrol.
 	`{"name":"\u0000\u0001json_diff","arguments":{}}`,
-	`{"name":"json_diff","arguments":{"json_a":"null\u0000byte","json_b":"null byte"}}`,
+	`{"name":"security.json_diff","arguments":{"json_a":"null\u0000byte","json_b":"null byte"}}`,
 	// lone surrogate (JSON tidak valid secara Unicode).
-	`{"name":"json_diff","arguments":{"json_a":"\ud800","json_b":"ok"}}`,
+	`{"name":"security.json_diff","arguments":{"json_a":"\ud800","json_b":"ok"}}`,
 	// surrogate pair valid — harus diterima sebagai string biasa.
-	`{"name":"json_diff","arguments":{"json_a":"\ud83d\ude00","json_b":"😀"}}`,
+	`{"name":"security.json_diff","arguments":{"json_a":"\ud83d\ude00","json_b":"😀"}}`,
 	// params berupa skalar, bukan object.
 	`"hanya string"`,
 	`42`,
@@ -133,7 +133,7 @@ func TestToolsCallOversizedArguments(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	// json_diff 1MB vs 1MB identik → observed, observations kosong.
 	resps := runServer(t, srv, mustRequest(t, 1, "tools/call", map[string]any{
-		"name": "json_diff", "arguments": map[string]any{"json_a": big, "json_b": big},
+		"name": "security.json_diff", "arguments": map[string]any{"json_a": big, "json_b": big},
 	}))
 	if text := callText(t, resps[0]); !strings.Contains(text, `"status":"observed"`) {
 		t.Errorf("json_diff 1MB identik harus observed, dapat: %.120s", text)
@@ -141,7 +141,7 @@ func TestToolsCallOversizedArguments(t *testing.T) {
 
 	// json_diff 1MB dengan satu char beda → tetap observed (bukan error).
 	resps = runServer(t, srv, mustRequest(t, 2, "tools/call", map[string]any{
-		"name": "json_diff", "arguments": map[string]any{"json_a": big, "json_b": "B" + big[1:]},
+		"name": "security.json_diff", "arguments": map[string]any{"json_a": big, "json_b": "B" + big[1:]},
 	}))
 	if text := callText(t, resps[0]); !strings.Contains(text, `"status":"observed"`) {
 		t.Errorf("json_diff beda 1 char harus observed: %.120s", text)
@@ -149,7 +149,7 @@ func TestToolsCallOversizedArguments(t *testing.T) {
 
 	// list_history dengan url_substring 1MB → tidak ada yang cocok.
 	resps = runServer(t, srv, mustRequest(t, 3, "tools/call", map[string]any{
-		"name": "list_history", "arguments": map[string]any{"url_substring": big},
+		"name": "security.list_history", "arguments": map[string]any{"url_substring": big},
 	}))
 	if text := callText(t, resps[0]); !strings.Contains(text, `"status":"observed"`) {
 		t.Errorf("list_history substring 1MB harus observed: %.120s", text)
@@ -157,7 +157,7 @@ func TestToolsCallOversizedArguments(t *testing.T) {
 
 	// inspect_request dengan evidence_ref 1MB → invalid params rapi.
 	resps = runServer(t, srv, mustRequest(t, 4, "tools/call", map[string]any{
-		"name": "inspect_request", "arguments": map[string]any{"evidence_ref": big},
+		"name": "security.inspect_request", "arguments": map[string]any{"evidence_ref": big},
 	}))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("evidence_ref 1MB harus -32602, dapat %v", resps[0])
@@ -166,7 +166,7 @@ func TestToolsCallOversizedArguments(t *testing.T) {
 	// request_replay url 1MB → ditolak di jalur enforcement (approval tidak
 	// ada untuk host seperti itu), tanpa panic.
 	resps = runServer(t, srv, mustRequest(t, 5, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/" + big, "method": "GET", "case": "c",
 		},
@@ -206,7 +206,7 @@ func TestToolsCallOversizedBodyForwarded(t *testing.T) {
 	}
 	big := strings.Repeat("B", 1<<20)
 	resps := runServer(t, srv, mustRequest(t, 21, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/orders/1", "method": "GET", "body": big, "case": "c",
 		},
@@ -286,7 +286,7 @@ func TestInspectRequestTraversalRefs(t *testing.T) {
 	for i, ref := range refs {
 		srv, _ := newTestServer(t, nil, nil)
 		resps := runServer(t, srv, mustRequest(t, 9000+i, "tools/call", map[string]any{
-			"name": "inspect_request", "arguments": map[string]any{"evidence_ref": ref},
+			"name": "security.inspect_request", "arguments": map[string]any{"evidence_ref": ref},
 		}))
 		if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 			t.Errorf("ref %q harus -32602, dapat %v", ref, resps[0])
@@ -295,7 +295,7 @@ func TestInspectRequestTraversalRefs(t *testing.T) {
 	// response_comparison juga tervalidasi.
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 9999, "tools/call", map[string]any{
-		"name": "response_comparison",
+		"name": "security.response_comparison",
 		"arguments": map[string]any{
 			"evidence_ref_a": "evidence-000001.json", "evidence_ref_b": "../evidence-000002.json",
 		},
@@ -328,9 +328,9 @@ func TestToolsCallEvidenceTamperFailsClosed(t *testing.T) {
 	srv, _ := newTestServer(t, nil, func(c *Config) { c.EvidenceDir = dir })
 	resps := runServer(t, srv,
 		mustRequest(t, 31, "tools/call", map[string]any{
-			"name": "inspect_request", "arguments": map[string]any{"evidence_ref": "evidence-000001.json"},
+			"name": "security.inspect_request", "arguments": map[string]any{"evidence_ref": "evidence-000001.json"},
 		}),
-		mustRequest(t, 32, "tools/call", map[string]any{"name": "list_history", "arguments": map[string]any{}}),
+		mustRequest(t, 32, "tools/call", map[string]any{"name": "security.list_history", "arguments": map[string]any{}}),
 	)
 	if e, ok := resps[0]["error"].(map[string]any); !ok || !strings.Contains(fmt.Sprint(e["data"]), "integritas") {
 		t.Errorf("inspect pada evidence tamper harus error integritas, dapat %v", resps[0])

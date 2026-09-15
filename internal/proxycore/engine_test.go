@@ -16,6 +16,30 @@ import (
 	"testing"
 )
 
+func TestNextHopStripsCredentialsWhenSchemeChanges(t *testing.T) {
+	curURL, err := url.Parse("https://in-scope.example.test/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc, err := url.Parse("http://in-scope.example.test/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := nextHop(hop{
+		method:  http.MethodGet,
+		url:     curURL,
+		headers: http.Header{"Authorization": {"Bearer secret"}, "X-Api-Key": {"key-secret"}},
+	}, &hopResponse{status: http.StatusFound}, loc)
+
+	if got := next.headers.Get("Authorization"); got != "" {
+		t.Errorf("Authorization leaked across scheme change: %q", got)
+	}
+	if got := next.headers.Get("X-Api-Key"); got != "" {
+		t.Errorf("X-Api-Key leaked across scheme change: %q", got)
+	}
+}
+
 // TestExecuteHappyPath: eksekusi HTTP nyata ke target lokal (httptest),
 // evidence tertulis, body inline utuh (di bawah context budget).
 func TestExecuteHappyPath(t *testing.T) {
