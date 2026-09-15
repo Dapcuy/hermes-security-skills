@@ -20,10 +20,10 @@
 # Stage 1 — install httpx versi TER-PIN (pola persis §13.1).
 # JANGAN mengubah versi tanpa review supply chain: versi ini juga di-hardcode
 # di wrapper (const toolVersion) untuk provenance — keduanya WAJIB diganti
-# bersamaan. httpx v1.12.0 butuh Go >= 1.26 (go.mod) → image golang:1.26.
-# §14 — naikkan ke digest pinning saat publish: golang:1.26@sha256:<digest>
+# bersamaan. httpx v1.12.0 butuh Go >= 1.26 (go.mod) → image golang:1.27-bookworm.
+# §14 — immutable manifest pin: golang:1.27-bookworm@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM golang:1.26@sha256:3c3e25a4da13fd0478eed2df1eb35a0e667094a7124d3993a6a1d30f71c17e79 AS build
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
 # CGO_ENABLED=0 — httpx harus static binary: base runtime distroless STATIC
 # tidak punya dynamic loader (glibc), exec binary dinamis gagal
 # "no such file or directory" saat fork/exec.

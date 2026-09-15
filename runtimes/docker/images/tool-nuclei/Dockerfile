@@ -37,18 +37,32 @@
 # -----------------------------------------------------------------------------
 ARG NUCLEI_TEMPLATES_TAG=v10.4.8
 
+ARG NUCLEI_VERSION=v3.11.1
+
 # -----------------------------------------------------------------------------
 # Stage 1 — install nuclei versi TER-PIN (pola persis §13.1).
 # JANGAN mengubah versi tanpa review supply chain: versi ini juga
 # di-hardcode di wrapper (const toolVersion) untuk provenance —
 # keduanya WAJIB diganti bersamaan.
-# §14 — naikkan ke digest pinning saat publish: golang:1.23@sha256:<digest>
+#   NUCLEI v3.11.1 butuh Go >= 1.25 (go.mod) → image golang:1.27-bookworm.
+# §14 — immutable manifest pinning: golang:1.27-bookworm@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM golang:1.23@sha256:60deed95d3888cc5e4d9ff8a10c54e5edc008c6ae3fba6187be6fb592e19e8c0 AS build
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
+ARG NUCLEI_VERSION
 # CGO_ENABLED=0 — nuclei harus static binary: base runtime distroless STATIC
 # tidak punya dynamic loader (glibc), exec binary dinamis gagal
 # "no such file or directory" saat fork/exec.
-RUN CGO_ENABLED=0 go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.3.9
+RUN git clone --depth 1 --branch "${NUCLEI_VERSION}" \
+      https://github.com/projectdiscovery/nuclei /tmp/nuclei \
+ && cd /tmp/nuclei \
+ && go mod edit \
+      -require=github.com/go-git/go-git/v5@v5.19.2 \
+      -require=golang.org/x/crypto@v0.55.0 \
+      -require=golang.org/x/mod@v0.40.0 \
+      -require=google.golang.org/grpc@v1.83.2 \
+ && go mod tidy \
+ && CGO_ENABLED=0 go build -trimpath -o /go/bin/nuclei ./cmd/nuclei \
+ && rm -rf /tmp/nuclei
 
 # -----------------------------------------------------------------------------
 # Stage 1b — build wrapper fail-closed (module kecil terpisah, stdlib only).
@@ -66,9 +80,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 # Clone --depth 1 pada tag terpin (bukan master/HEAD yang bergerak), buang
 # .git, dan FAIL-CLOSED saat build jika hasil clone tidak memuat satu .yaml
 # pun — image tanpa template tidak boleh ter-generate.
-# golang image dipakai lagi karena sudah ada di cache build dan menyertakan git.
+#   Go 1.27-bookworm dipakai untuk build dan template stage agar toolchain
+#   konsisten dan fixed CVE pada stdlib tidak ikut terbawa ke artifact.
 # -----------------------------------------------------------------------------
-FROM golang:1.23@sha256:60deed95d3888cc5e4d9ff8a10c54e5edc008c6ae3fba6187be6fb592e19e8c0 AS templates
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS templates
 ARG NUCLEI_TEMPLATES_TAG
 RUN git clone --depth 1 --branch "${NUCLEI_TEMPLATES_TAG}" \
       https://github.com/projectdiscovery/nuclei-templates /tmp/nuclei-templates \
@@ -118,7 +133,7 @@ ENTRYPOINT ["/wrapper"]
 #       MENOLAK jalan (exit 2) bila /nuclei-templates tidak ada atau kosong —
 #       bukti bahwa scan hanya berjalan dengan template ter-bake.
 #       Baseline read_only + nonroot membuat download template mustahil.
-#     - Versi tool (v3.3.9) + versi template (ARG NUCLEI_TEMPLATES_TAG →
+#   Versi tool (v3.11.1) + versi template (ARG NUCLEI_TEMPLATES_TAG →
 #       .hermes-templates-version) dicatat wrapper di provenance evidence.
 #
 #   Risk classification: active scanning = MEDIUM–HIGH (§8) → wajib approval,

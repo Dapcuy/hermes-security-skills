@@ -38,18 +38,27 @@
 # -----------------------------------------------------------------------------
 ARG SECLISTS_TAG=2026.1
 
+ARG FFUF_VERSION=v2.3.0
+
 # -----------------------------------------------------------------------------
 # Stage 1 — install ffuf versi TER-PIN (pola persis §13.1).
 # JANGAN mengubah versi tanpa review supply chain: versi ini juga di-hardcode
 # di wrapper (const toolVersion) untuk provenance — keduanya WAJIB diganti
-# bersamaan. ffuf v2.3.0 butuh Go >= 1.20 (go.mod) → image golang:1.25.
-# §14 — naikkan ke digest pinning saat publish: golang:1.25@sha256:<digest>
+# bersamaan. ffuf v2.3.0 butuh Go >= 1.20 (go.mod) → image golang:1.27-bookworm.
+# §14 — immutable manifest pin: golang:1.27-bookworm@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM golang:1.25@sha256:699337d620559a59b4a2bb298ad59611e535d2ee755a34cf2d2a98f37578dc80 AS build
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
+ARG FFUF_VERSION
 # CGO_ENABLED=0 — ffuf harus static binary: base runtime distroless STATIC
 # tidak punya dynamic loader (glibc), exec binary dinamis gagal
 # "no such file or directory" saat fork/exec.
-RUN CGO_ENABLED=0 go install -v github.com/ffuf/ffuf/v2@v2.3.0
+RUN git clone --depth 1 --branch "${FFUF_VERSION}" \
+      https://github.com/ffuf/ffuf /tmp/ffuf \
+ && cd /tmp/ffuf \
+ && go mod edit -require=golang.org/x/net@v0.56.0 \
+ && go mod tidy \
+ && CGO_ENABLED=0 go build -trimpath -o /go/bin/ffuf . \
+ && rm -rf /tmp/ffuf
 
 # -----------------------------------------------------------------------------
 # Stage 1b — build wrapper fail-closed (module kecil terpisah, stdlib only).
@@ -74,7 +83,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 # raft-small-words.txt (~340 KB). Catatan: small.txt tidak ada lagi pada tag
 # 2026.1 — padanannya raft-small-words.txt.
 # -----------------------------------------------------------------------------
-FROM golang:1.25@sha256:699337d620559a59b4a2bb298ad59611e535d2ee755a34cf2d2a98f37578dc80 AS wordlists
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS wordlists
 ARG SECLISTS_TAG
 RUN git clone --depth 1 --branch "${SECLISTS_TAG}" \
       https://github.com/danielmiessler/SecLists /tmp/seclists \

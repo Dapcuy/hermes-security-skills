@@ -19,10 +19,10 @@
 # Stage 1 — build
 # Base image di-PIN per tag: golang:1.23.
 # §14 — sebelum publish production, naikkan ke digest pinning permanen:
-#   FROM golang:1.23@sha256:<digest>
-#   (ambil digest: docker buildx imagetools inspect golang:1.23)
+#   FROM golang:1.27-bookworm@sha256:<digest>
+#   (digest manifest diambil dari `docker buildx imagetools inspect golang:1.27-bookworm`)
 # -----------------------------------------------------------------------------
-FROM golang:1.23@sha256:60deed95d3888cc5e4d9ff8a10c54e5edc008c6ae3fba6187be6fb592e19e8c0 AS build
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
 
 # TARGETARCH di-set otomatis oleh buildx untuk multi-platform build (§19).
 # Pada `docker build` biasa variabel ini kosong; GOARCH="" berarti Go

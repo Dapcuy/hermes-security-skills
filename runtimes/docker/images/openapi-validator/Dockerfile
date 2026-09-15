@@ -9,9 +9,8 @@
 #     -t hermes-validator-openapi:0.1.0 .
 # =============================================================================
 
-# §14 — tag pinning; naikkan ke digest pinning saat publish:
-#   FROM golang:1.23@sha256:<digest>
-FROM golang:1.23@sha256:60deed95d3888cc5e4d9ff8a10c54e5edc008c6ae3fba6187be6fb592e19e8c0 AS build
+# §14 — immutable manifest pin: golang:1.27-bookworm@sha256:<digest>
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
 
 # TARGETARCH di-set otomatis oleh buildx; kosong = fallback arsitektur host.
 ARG TARGETARCH
