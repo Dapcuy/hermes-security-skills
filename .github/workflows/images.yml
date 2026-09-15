@@ -83,13 +83,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
-      - name: Login ke GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       # §37 urutan: Build → Scan SEBELUM publish. Image dibangun lokal
       # (load: true), discan, baru di-push bila build selesai. HIGH/CRITICAL
       # menggagalkan release; SARIF tetap di-upload sebagai artifact.
@@ -105,7 +98,7 @@ jobs:
 
       # Release gate: HIGH/CRITICAL yang tidak ter-fix menggagalkan publish.
       - name: Scan Trivy (HIGH, CRITICAL — release gate)
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
         with:
           image-ref: hermes-local/${{ matrix.image }}:ci
           severity: HIGH,CRITICAL
@@ -121,6 +114,13 @@ jobs:
           name: trivy-${{ matrix.image }}
           path: trivy-${{ matrix.image }}.sarif
           if-no-files-found: error
+
+      - name: Login ke GHCR (setelah scan gate)
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Publish image yang SAMA dengan image yang sudah di-load dan discan.
       # Tidak ada rebuild setelah Trivy: tag/push hanya memindahkan image ID
