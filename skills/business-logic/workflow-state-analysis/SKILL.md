@@ -134,4 +134,4 @@ requires_credentials: true
 - `transaction-analysis` — alur yang menyentuh transaksi finansial.
 - `replay-and-duplicate-action-analysis` — pengulangan aksi dan idempotency.
 - `vulnerability-validation` — kerangka validasi umum dan status lifecycle.
-- `http-proxy-request-mutation` — manipulasi request lanjutan di domain proxy.
+- `http-request-mutation` — manipulasi request lanjutan di domain proxy.

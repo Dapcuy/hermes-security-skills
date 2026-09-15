@@ -1,0 +1,11 @@
+global: {}
+route:
+  receiver: operator-configured
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: operator-configured
+    # Add an approved notification sink in the deployment secret/config.
+    # Do not put webhook URLs, tokens, SMTP passwords, or credentials in git.

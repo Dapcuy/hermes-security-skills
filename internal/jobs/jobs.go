@@ -108,6 +108,9 @@ func (w *Workspace) WriteTask(task any) error {
 
 // WriteLog menyimpan output container ke logs/ (bukti eksekusi §18).
 func (w *Workspace) WriteLog(name string, data []byte) error {
+	if name == "" || filepath.Base(name) != name || strings.ContainsAny(name, `/\\`) || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`).MatchString(name) {
+		return fmt.Errorf("jobs: nama log %q tidak valid atau keluar dari logs dir", name)
+	}
 	path := filepath.Join(w.LogsDir, name)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("jobs: tulis log %s: %w", path, err)

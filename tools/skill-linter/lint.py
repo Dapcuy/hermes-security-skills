@@ -72,17 +72,18 @@ CREDENTIALS_SECTION = "Required Credentials"
 # (ROADMAP §5). Bila registry berubah, sinkronkan daftar ini.
 # Entri hermes-tool-* adalah capability tool pihak ketiga (ROADMAP §13.1):
 # satu tool = satu image terkurasi, dieksekusi lewat provider docker.
+# Allowlist capability mengikuti ROADMAP v3.0 §12 (registry.yaml).
+# Risk/approval spesifik per TOOL (nmap dsb.) hidup di tools/registry.yaml
+# (Tool Registry, §36) - skill hanya merujuk capability.
 ALLOWED_CAPABILITIES = (
     "inspect_request",
     "request_replay",
+    "request_mutation",
     "response_comparison",
-    "list_history",
-    "json_diff",
+    "endpoint_discovery",
+    "template_based_validation",
     "openapi_analysis",
-    "subfinder_enum",
-    "httpx_probe",
-    "nmap_scan",
-    "ffuf_fuzz",
+    "json_diff",
 )
 
 VALID_RISKS = ("low", "medium", "high", "critical")

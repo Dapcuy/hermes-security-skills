@@ -1,0 +1,105 @@
+# tools/registry.yaml — Tool Registry (ROADMAP v3.0 §36, Phase 8)
+#
+# Sumber kebenaran untuk third-party tool yang DIKURASI: identitas, versi,
+# image, digest, signature, risk, capability mapping, network requirement,
+# approval requirement, dan evidence parser — per tool (bukan per capability;
+# lihat capabilities/registry.yaml §12).
+#
+# Prinsip (ROADMAP §35): Tool = untrusted dependency; Capability = trusted
+# interface. Satu tool = satu image terkurasi (§38). Tool tidak pernah
+# dijalankan langsung — selalu lewat wrapper fail-closed di dalam image
+# (§39, lihat tools/wrappers/README.md).
+#
+# Format: YAML subset (internal/yamlmini) — map/seq/scalar, tanpa anchor,
+# tanpa flow mapping, tanpa multiline scalar. Loader: internal/toolregistry
+# (fail-closed: field wajib hilang, enum salah, field tidak dikenal, atau
+# entry invalid = registry ditolak seluruhnya).
+#
+# Schema manifest per tool: schemas/tool-manifest.schema.json.
+
+version: 1
+
+tools:
+
+  nuclei:
+    category: vulnerability-detection
+    image: hermes-tool-nuclei
+    version: 3.3.9
+    # Digest di bawah diambil dari build lokal dev (docker inspect --format
+    # '{{.Id}}' hermes/tool-nuclei:dev). digest final diisi ulang CI saat
+    # signed release (§40).
+    digest: sha256:af9c62369480cb6b2c825161231db5a3dfed449f44a96c273d13d8d045f9a373
+    signature_required: true
+    risk: medium
+    provider: docker
+    capability: template_based_validation
+    network_requirement: target-http
+    approval_requirement: conditional
+    evidence_parser: validation-result-json
+    # Templates ter-bake di image pada tag terpin — runtime TIDAK PERNAH
+    # auto-update (§41). Satu PR = satu bump versi (review supply chain).
+    templates_version: v10.4.8
+
+  subfinder:
+    category: attack-surface-discovery
+    image: hermes-tool-subfinder
+    version: 2.16.0
+    # digest final diisi ulang CI saat signed release (§40).
+    digest: sha256:bb07df77bb3b891e93aa84a8425d19d6931c28d5351575a575a34dd15fb19abe
+    signature_required: true
+    risk: low
+    provider: docker
+    capability: endpoint_discovery
+    # Passive recon: egress HANYA ke third-party data sources — tidak ada
+    # request ke target; domain target wajib in-scope.
+    network_requirement: third-party-passive-sources
+    approval_requirement: automatic
+    evidence_parser: validation-result-json
+
+  httpx:
+    category: url-probing
+    image: hermes-tool-httpx
+    version: 1.12.0
+    # digest final diisi ulang CI saat signed release (§40).
+    digest: sha256:6e8e333d2ea9a91ae270f3d7a0bff4a86a653b7fab37b57270ea9526af1f19ae
+    signature_required: true
+    risk: low
+    provider: docker
+    capability: endpoint_discovery
+    network_requirement: target-http
+    approval_requirement: automatic
+    evidence_parser: validation-result-json
+
+  nmap:
+    category: port-scanning
+    image: hermes-tool-nmap
+    version: 7.93
+    # digest final diisi ulang CI saat signed release (§40).
+    digest: sha256:6b9054dcea800cc5cbbece3bb4adccb2c14f048ea77557abdaf644021183ae4d
+    signature_required: true
+    # Port scanning aktif = risk HIGH: approval eksplisit SELALU wajib
+    # (§12/§15) — policy/risk.yaml high -> approval_required, tidak pernah
+    # automatic; metode dan port range dibatasi execution plan + wrapper.
+    risk: high
+    provider: docker
+    capability: endpoint_discovery
+    network_requirement: target-connect-scan
+    approval_requirement: always
+    evidence_parser: validation-result-json
+
+  ffuf:
+    category: content-discovery
+    image: hermes-tool-ffuf
+    version: 2.3.0
+    # digest final diisi ulang CI saat signed release (§40).
+    digest: sha256:637bb1aa7d92403abf182fb0be6edd433ac8eb7dfe4a1edd9691ef486b42d5cf
+    signature_required: true
+    risk: medium
+    provider: docker
+    capability: endpoint_discovery
+    network_requirement: target-http
+    approval_requirement: conditional
+    evidence_parser: validation-result-json
+    # Wordlist SecLists ter-bake di image pada tag terpin — fuzzing tanpa
+    # wordlist ter-bake ditolak wrapper (fail-closed, §13.1).
+    wordlists_version: SecLists 2026.1

@@ -50,7 +50,7 @@ risk: medium
 
 ## Required Capabilities
 
-- `list_history` — mengumpulkan request fitur fetch yang terekam beserta baseline waktu dan error-nya.
+
 - `request_replay` — menjalankan ulang fitur dengan URL canary unik yang menunjuk listener tester, satu canary per iterasi.
 - `response_comparison` — membandingkan respons baseline dengan respons iterasi canary untuk mendeteksi differential.
 - Bukti callback dibaca dari log listener tester, bukan dari capability — capability hanya mengeksekusi request terhadap target dalam scope.
@@ -139,7 +139,7 @@ risk: medium
 
 - `web-surface-mapping` — inventaris entry point yang menerima URL.
 - `server-side-data-flow` — menelusuri arah data dari input ke proses server-side.
-- `http-proxy-request-replay`, `http-proxy-response-comparison` — operasi inti yang dipakai.
+- `http-request-replay`, `http-response-comparison` — operasi inti yang dipakai.
 - `hypothesis-management` — status hypothesis sebelum dan sesudah iterasi.
 - `false-positive-analysis` — triase mendalam sebelum status naik.
 - `vulnerability-validation` — kerangka validasi dan lifecycle finding.

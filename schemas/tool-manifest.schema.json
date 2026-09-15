@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hermes-security-skills/schemas/tool-manifest.schema.json",
+  "title": "Tool Manifest",
+  "description": "Manifest satu tool pihak ketiga terkurasi (ROADMAP v3.0 §36). Sumber kebenaran: tools/registry.yaml (entry per tool, key = name). Loader internal/toolregistry menerapkan constraint yang sama secara fail-closed; schema ini mendokumentasikan kontrak untuk CI (signed release §40) dan review supply chain (§37).",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Nama tool (key entry di tools/registry.yaml), mis. nuclei."
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Kategori fungsi tool, mis. vulnerability-detection, port-scanning."
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+      "description": "Nama image terkurasi satu tool (ROADMAP §38), mis. hermes-tool-nuclei."
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Versi tool ter-pin (mis. 3.3.9). Tidak pernah auto-update saat runtime (§41)."
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "Digest image ter-pin (sha256:...). Diisi ulang CI saat signed release (§40)."
+    },
+    "signature_required": {
+      "type": "boolean",
+      "description": "Wajib verifikasi signature image sebelum eksekusi (§40)."
+    },
+    "risk": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "Klasifikasi risk per tool (§15). Menentukan approval expectation bersama approval_requirement."
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["docker"],
+      "description": "Provider eksekusi tool — selalu docker (image terkurasi, baseline §31)."
+    },
+    "capability": {
+      "type": "string",
+      "enum": [
+        "inspect_request",
+        "request_replay",
+        "request_mutation",
+        "response_comparison",
+        "endpoint_discovery",
+        "template_based_validation",
+        "openapi_analysis",
+        "json_diff"
+      ],
+      "description": "Capability yang dilayani tool ini — harus terdaftar di capabilities/registry.yaml (§12)."
+    },
+    "network_requirement": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Kebutuhan egress tool, mis. third-party-passive-sources (subfinder), target-http (httpx/ffuf/nuclei), target-connect-scan (nmap)."
+    },
+    "approval_requirement": {
+      "type": "string",
+      "enum": ["automatic", "conditional", "always"],
+      "description": "Approval requirement per tool (§12): automatic = tanpa approval; conditional = scoped approval wajib; always = TIDAK PERNAH jalan tanpa approval aktif (mis. nmap)."
+    },
+    "evidence_parser": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Parser output tool menjadi evidence terstruktur — kontrak wrapper: validation-result-json (§33/§39)."
+    },
+    "templates_version": {
+      "type": "string",
+      "description": "Opsional: versi template ter-bake ter-pin (mis. nuclei templates v10.4.8, §41)."
+    },
+    "wordlists_version": {
+      "type": "string",
+      "description": "Opsional: versi wordlist ter-bake ter-pin (mis. SecLists 2026.1)."
+    }
+  },
+  "required": [
+    "name",
+    "category",
+    "image",
+    "version",
+    "digest",
+    "signature_required",
+    "risk",
+    "provider",
+    "capability",
+    "network_requirement",
+    "approval_requirement",
+    "evidence_parser"
+  ],
+  "additionalProperties": false
+}

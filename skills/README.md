@@ -2,7 +2,7 @@
 name: skills-index
 description: >
   Use when navigating the skills/ directory: the map of all skill
-  categories per tier (ROADMAP §6), what each category covers, and how
+  categories per tier (ROADMAP §8, §11), what each category covers, and how
   to pick the right starting point before loading a specific skill.
 version: 0.1.0
 risk: low
@@ -12,7 +12,7 @@ risk: low
 
 ## Purpose
 
-- Menjadi peta kategori `skills/`: kategori apa saja yang ada, tier berapa, dan apa cakupan masing-masing (ROADMAP §6).
+- Menjadi peta kategori `skills/`: kategori apa saja yang ada, tier berapa, dan apa cakupan masing-masing (ROADMAP §8, §11).
 - Membantu memilih kategori awal sebelum memuat skill spesifik, sehingga routing tidak menebak dari nama file.
 - Menyatakan total dan jumlah skill per kategori sebagai snapshot kondisi repo.
 - Menegaskan aturan umum yang berlaku untuk semua skill: format standar §7, wajib lolos skill-linter §7.1, dan skill hanya meminta capability (ROADMAP §4.1).
@@ -39,9 +39,9 @@ risk: low
 
 ## Required Context
 
-- Struktur direktori `skills/` saat ini dan daftar tier pada ROADMAP §6.
+- Struktur direktori `skills/` saat ini dan daftar tier pada ROADMAP §11.
 - ROUTING.md untuk pemetaan gejala → skill yang lebih rinci.
-- capabilities/registry.yaml sebagai daftar capability yang valid (ROADMAP §5).
+- capabilities/registry.yaml sebagai daftar capability yang valid (ROADMAP §12).
 - tools/skill-linter sebagai validator format untuk setiap SKILL.md (ROADMAP §7.1).
 
 ## Required Capabilities
@@ -51,18 +51,18 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 ## Core Concepts
 
 - **core/** (Tier 1): fondasi setiap engagement — scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting.
-- **recon/** (Tier 2): pemetaan permukaan — recon pasif dari sumber publik, enumerasi subdomain pasif via data source, probing teknologi aktif atas aset in-scope, port scanning terkendali ber-approval, indikasi subdomain takeover, ekstraksi endpoint dari data terekam, fingerprint teknologi, dan prioritisasi permukaan; `web-surface-mapping` yang satu tier dengannya berada di `web/`.
-- **http/** (Tier 3): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, analisis auth flow, dan analisis capture traffic browser.
-- **web/** (Tier 4): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, keamanan file upload, misconfiguration, validasi payload, validasi injection, analisis WAF, controlled fuzzing, dan penemuan path tersembunyi via fuzzing terkendali.
-- **api/** (Tier 5): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token/JWT, rate limit, dan webhook/callback.
-- **business-logic/** (Tier 6): kerentanan yang tak tertangkap scanner — workflow, transaksi, replay, race condition, isolasi multi-tenant, anomali perilaku, dan vulnerability chaining.
-- **source/** (Tier 7): review source code yang sepenuhnya pasif — triage codebase, review authorization, data flow server-side, deteksi secret, dan risiko dependensi; tanpa capability aktif.
-- **specialized/** (Tier 8): domain khusus sesuai kebutuhan nyata — keamanan integrasi LLM, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, dan responsible disclosure.
+- **http/** (Tier 2): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, analisis auth flow, analisis header keamanan, analisis redirect, dan analisis capture traffic browser (supporting).
+- **web/** (Tier 3): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, keamanan file upload, misconfiguration, plus skill pendukung payload dan fuzzing.
+- **api/** (Tier 4): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token/JWT, OAuth/OIDC, rate limit, dan webhook/callback.
+- **business-logic/** (Tier 5): kerentanan yang tak tertangkap scanner — workflow, transaksi, replay, race condition, isolasi multi-tenant, anomali perilaku, dan vulnerability chaining.
+- **discovery/** (supporting): pemetaan permukaan — recon pasif dari sumber publik, enumerasi subdomain pasif via data source, probing teknologi aktif atas aset in-scope, port scanning terkendali ber-approval, indikasi subdomain takeover, ekstraksi endpoint dari data terekam, fingerprint teknologi, dan prioritisasi permukaan; `web-surface-mapping` yang satu tier dengan web berada di `web/`.
+- **source/** (supporting): review source code yang sepenuhnya pasif — review authorization, data flow server-side, dan deteksi secret; tanpa capability aktif.
+- **specialized/** (Tier 6): domain khusus sesuai kebutuhan nyata — triage source code, risiko dependensi, keamanan integrasi LLM API, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, dan responsible disclosure.
 
 ## Reasoning Workflow
 
-1. Tentukan konteks: engagement baru, target web/API, kode sumber, atau domain khusus.
-2. Petakan konteks ke kategori: fondasi → core; pemetaan permukaan awal → recon; permukaan web → web; API → api; operasi HTTP → http; kode tersedia → source; domain khusus → specialized.
+1. Tentukan konteks: engagement baru, target web/API, operasi HTTP, pemetaan permukaan, kode sumber, atau domain khusus.
+2. Petakan konteks ke kategori: fondasi → core; pemetaan permukaan awal → discovery; permukaan web → web; API → api; operasi HTTP → http; kode tersedia → source; domain khusus → specialized.
 3. Buka SKILL.md pada kategori terpilih; pastikan prasyaratnya (authorization, context, capability) terpenuhi.
 4. Bila gejala masih ambigu, lanjutkan ke ROUTING.md untuk pemetaan per-gejala.
 5. Selalu mulai dari engagement-scoping untuk engagement baru — tanpa kecuali.
@@ -71,25 +71,25 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 
 - Membaca struktur skills/ dan merujuk SKILL.md pada kategori terkait.
 - Memperbarui tabel snapshot pada Output Format saat skill baru ditambahkan.
-- Menambahkan kategori baru hanya bila ROADMAP §6 mendefinisikannya.
+- Menambahkan kategori baru hanya bila ROADMAP §8 mendefinisikannya.
 
 ## Approval Requirements
 
 - Tidak ada approval: dokumen ini tidak melakukan operasi apa pun (ROADMAP §8).
 - Perubahan isi peta cukup melalui review normal repo; tidak menyentuh policy maupun capability registry (ROADMAP §4.3).
-- Penambahan kategori yang tidak ada di ROADMAP §6 wajib dikonsultasikan dulu, bukan langsung dibuatkan direktorinya.
+- Penambahan kategori yang tidak ada di ROADMAP §8 wajib dikonsultasikan dulu, bukan langsung dibuatkan direktorinya.
 
 ## Forbidden Operations
 
 - Memperlakukan halaman ini sebagai authorization, scope, atau batasan engagement.
-- Mengubah definisi tier atau daftar skill resmi di luar ROADMAP §6.
+- Mengubah definisi tier atau daftar skill resmi di luar ROADMAP §11.
 - Mencantumkan capability yang tidak terdaftar di registry pada referensi skill mana pun.
 - Menaruh data target, kredensial, atau evidence di dalam dokumen ini (ROADMAP §23, §25).
 
 ## Evidence Requirements
 
 - Tabel kategori pada Output Format mencantumkan jumlah skill per kategori dan tanggal/kondisi snapshot-nya.
-- Kategori yang masih placeholder ditandai eksplisit agar pembaca tahu isinya belum lengkap.
+- Jumlah per kategori diverifikasi langsung dari struktur direktori saat snapshot dibuat.
 - Setiap klaim aturan merujuk sumbernya (ROADMAP §7, §7.1, §4.1).
 
 ## False Positive Checks
@@ -106,24 +106,24 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 
 ## Stop Conditions
 
-- Isi peta bertentangan dengan ROADMAP §6 atau ROUTING.md → ROADMAP adalah sumber kebenaran; tandai peta perlu diperbarui.
+- Isi peta bertentangan dengan ROADMAP §11 atau ROUTING.md → ROADMAP adalah sumber kebenaran; tandai peta perlu diperbarui.
 - Struktur skills/ berubah signifikan sejak snapshot → perbarui tabel sebelum dipakai untuk navigasi.
-- Kebutuhan kategori baru muncul yang belum ada di ROADMAP §6 → stop dan eskalasi sebagai keputusan roadmap, bukan keputusan lokal.
+- Kebutuhan kategori baru muncul yang belum ada di ROADMAP §8 → stop dan eskalasi sebagai keputusan roadmap, bukan keputusan lokal.
 
 ## Output Format
 
 | Kategori | Tier | Isi | Jumlah skill |
 |---|---|---|---|
 | `core/` | 1 | Fondasi setiap engagement: scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting. | 7 |
-| `recon/` | 2 | Pemetaan permukaan: recon pasif dari sumber publik, enumerasi subdomain pasif, probing teknologi aktif, port scanning terkendali (approval wajib), indikasi subdomain takeover, ekstraksi endpoint, fingerprint teknologi, prioritisasi permukaan. | 8 |
-| `http/` | 3 | Metodologi operasi HTTP melalui capability proxy: traffic analysis, replay, mutation, comparison, analisis auth flow, analisis capture traffic browser. | 6 |
-| `web/` | 4 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, file upload, misconfiguration, payload selection, injection validation, WAF analysis, controlled fuzzing, directory fuzzing. | 17 |
-| `api/` | 5 | Metodologi keamanan API: methodology, OpenAPI, REST testing, GraphQL, token/JWT, rate limit, webhook/callback. | 7 |
-| `business-logic/` | 6 | Kerentanan yang tak tertangkap scanner: workflow, transaksi, replay, race condition, isolasi multi-tenant, anomali perilaku, vulnerability chaining. | 8 |
-| `source/` | 7 | Review source code yang sepenuhnya pasif: triage codebase, review authorization, data flow server-side, deteksi secret, risiko dependensi. | 5 |
-| `specialized/` | 8 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: keamanan integrasi LLM, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, responsible disclosure. | 5 |
+| `http/` | 2 | Metodologi operasi HTTP melalui capability proxy: traffic analysis, replay, mutation, comparison, analisis auth flow, analisis header keamanan, analisis redirect, analisis capture traffic browser (supporting). | 8 |
+| `web/` | 3 | Analisis keamanan aplikasi web per kelas kerentanan: authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, file upload, misconfiguration, payload selection, injection validation, WAF analysis, controlled fuzzing, directory fuzzing. | 17 |
+| `api/` | 4 | Metodologi keamanan API: methodology, OpenAPI, REST testing, GraphQL, token/JWT, OAuth/OIDC, rate limit, webhook/callback. | 8 |
+| `business-logic/` | 5 | Kerentanan yang tak tertangkap scanner: workflow, transaksi, replay, race condition, isolasi multi-tenant, anomali perilaku, vulnerability chaining. | 8 |
+| `discovery/` | pendukung | Pemetaan permukaan: recon pasif dari sumber publik, enumerasi subdomain pasif, probing teknologi aktif, port scanning terkendali (approval wajib), indikasi subdomain takeover, ekstraksi endpoint, fingerprint teknologi, prioritisasi permukaan. | 8 |
+| `source/` | pendukung | Review source code yang sepenuhnya pasif: review authorization, data flow server-side, deteksi secret. | 3 |
+| `specialized/` | 6 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: triage source code, risiko dependensi, keamanan integrasi LLM API, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, responsible disclosure. | 7 |
 
-**Total: 63 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui, 2026-09-13; lihat False Positive Checks).
+**Total: 66 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui, 2026-09-13; lihat False Positive Checks).
 
 ## Related Skills
 

@@ -4,7 +4,27 @@ Semua perubahan yang menonjol pada project ini didokumentasikan di file ini.
 
 Format mengikuti semangat [Keep a Changelog](https://keepachangelog.com/), penomoran versi mengikuti [Semantic Versioning](https://semver.org/). Bahasa: naskah Indonesia, istilah teknis Inggris.
 
-## [Unreleased]
+## [Unreleased] — v3.0 (Web/API focused + Skill-First + Knowledge Base)
+
+Revisi arsitektural besar mengikuti ROADMAP v3.0: fokus Web/API (ADR-012), skill sebagai komponen utama, **memory dihapus sebagai komponen** dan diganti Knowledge Base curated (§23–§24).
+
+### Changed
+
+- **Memory dihapus sebagai komponen utama — diganti Knowledge Base curated (§23, §24, §61).** Direktori `memory/` dihapus seluruhnya; state kasus kini hidup di **evidence + jobs + approval + events**, bukan di "memori agent". Package `internal/memory` di-rename + refactor menjadi `internal/knowledge` (Entry/Store/Search + lifecycle captured→normalized→proposed→reviewed→trusted→stale→archived tetap); komponen case-memory (`IngestFromTarget`, `Retention`, dedup-per-case, penanganan `memory/cases`) dihapus. Knowledge firewall baru (§20/§23): `knowledge ingest` **menolak fail-closed** entry dengan `provenance.source: target-controlled` (atau trust untrusted) — konten target hidup di evidence, tidak pernah masuk knowledge base; promosi `reviewed`/`canonical` hanya lewat human review.
+- **Knowledge base di-restrukturisasi (§23):** direktori resmi kini `knowledge/{canonical, research, methodology, false-positives, reviewed}` (+ README per direktori: isi yang sah, siapa yang menulis, aturan provenance). Hasil ingest masuk `knowledge/research/` (state proposed); review memindahkan ke `knowledge/reviewed/`; promosi ke `canonical/` adalah keputusan owner; direktori `proposed/` lama dihapus. Entry `lesson-sqli-boolean-differential` direlokasi dari `memory/cases/juice-demo/` ke `knowledge/methodology/` (state `reviewed`, provenance tetap, catatan relokasi v3.0).
+- **CLI knowledge/case diperbarui:** `knowledge ingest/list/search/review/stale` kini berjalan di atas `internal/knowledge` dengan filter `--category` pada `knowledge list`; `case archive` (retention berbasis case memory) **dihapus** — case retention kini adalah jobs cleanup: `case clean <id> [--force]` menghapus `jobs/<case>` (tanpa `--force` = dry-run fail-closed; audit/approval tidak disentuh). `case brief`/`case list` tidak berubah.
+- **Skill hierarchy v3.0:** skill dijadikan komponen utama; rename `http-proxy-*` → `http-*`, kategori `recon/` → `discovery/`, `llm-security` → `llm-api-security`, ditambah 3 skill baru; struktur kategori konsolidasi menjadi `core, http, web, api, business-logic, discovery, specialized` (§8, §48).
+- **Capability registry dirapikan menjadi 8 capability generik (§12):** `inspect_request, request_replay, request_mutation, response_comparison, endpoint_discovery, template_based_validation, openapi_analysis, json_diff` — capability lama yang terikat tool spesifik (`subfinder_enum`, `httpx_probe`, `nmap_scan`, `ffuf_fuzz`) dan `list_history` dihapus; risk/approval per tool kini ditentukan Tool Registry.
+- **Tool Registry baru (`tools/registry.yaml`, ADR-011):** third-party tool diperlakukan sebagai untrusted supply-chain dependency — identitas, versi, digest, signature, risk, capability mapping, dan approval requirement per tool ditentukan registry; katalog seperti `hackingtool` hanya kandidat referensi, bukan dependency runtime.
+- **MCP tools di-namespace `security.*`** (`security.validate_scope`, `security.request_replay`, dst.) sesuai kontrak integrasi §6.
+- **ADR baru:** ADR-011 (Tool supply-chain architecture) dan ADR-012 (Web/API scope boundary — wireless/mobile/binary/firmware ditunda; discovery tetap in-scope sebagai bagian metodologi Web/API). Dokumen security-model dan threat-model diperbarui (firewall knowledge baru + threat "knowledge poisoning via target content").
+
+### Removed
+
+- **Direktori `memory/` dihapus seluruhnya** (README + `cases/` + `global/`) bersama seluruh konsep case memory: `Store.IngestFromTarget`, `Store.Retention`, dedup-per-case, dan jalur programatik konten target ke pipeline knowledge. State kasus kini eksklusif di evidence/jobs/approval/events (§24).
+- **Empat capability lama ter-tool-spesifik dihapus dari registry** (digantikan pemetaan generik via Tool Registry — lihat Changed).
+
+## [2.2.0] — Tool images, case brief, ekspansi skill (pra-v3.0)
 
 ### Added
 

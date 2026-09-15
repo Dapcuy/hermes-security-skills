@@ -47,7 +47,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — menemukan respons ber-header CORS dan baseline per endpoint.
+
 - `inspect_request` — memeriksa header request (Origin, Referer, Cookie) dan header respons CORS pada traffic terekam.
 - `request_replay` — mengulang request read-only dengan nilai Origin berbeda, satu variasi per iterasi.
 - Skill tidak menentukan provider; replay hanya berjalan di provider proxy (ROADMAP §4.1, §5.2).
@@ -131,6 +131,6 @@ risk: low
 
 - `web-authorization` — CORS bukan otorisasi; kebijakan ini hanya membatasi pembacaan lintas origin oleh browser.
 - `web-authentication` — skema cookie/session menentukan dampak credentialed CORS.
-- `http-proxy-traffic-analysis`, `http-proxy-request-replay`, `http-proxy-response-comparison` — operasi inti yang dipakai.
+- `http-traffic-analysis`, `http-request-replay`, `http-response-comparison` — operasi inti yang dipakai.
 - `false-positive-analysis` — triase sebelum status naik.
 - `vulnerability-validation` — kerangka lifecycle finding (ROADMAP §26).

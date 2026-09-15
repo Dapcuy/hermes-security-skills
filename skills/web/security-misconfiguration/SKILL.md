@@ -42,7 +42,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — menarik kumpulan request/response yang akan diaudit.
+
 - `inspect_request` — membedah pasangan request/response tertentu, termasuk header dan body respons.
 
 Kedua capability read-only dan tidak mengirim traffic (ROADMAP §5). Skill tidak menentukan provider — capability registry yang memilih (ROADMAP §4.1).
@@ -116,6 +116,6 @@ Kedua capability read-only dan tidak mengirim traffic (ROADMAP §5). Skill tidak
 ## Related Skills
 
 - `web-surface-mapping` — pemasok inventaris yang diaudit.
-- `http-proxy-traffic-analysis` — pembacaan history yang lebih mendalam.
+- `http-traffic-analysis` — pembacaan history yang lebih mendalam.
 - `cors-analysis` — khusus kebijakan cross-origin.
 - `vulnerability-validation` — bila temuan dugaan butuh pembuktian aktif.

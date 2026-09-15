@@ -43,7 +43,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — menarik dan memfilter entri capture per host, waktu, dan tipe konten.
+
 - `inspect_request` — membedah header (CORS, cache, service worker), body, dan urutan request.
 
 Keduanya read-only dan tidak mengirim traffic ke target (ROADMAP §5). Tidak ada capability aktif di skill ini: konfirmasi atas anomali dirutekan ke skill replay dengan approval tersendiri (ROADMAP §4.1, §8).
@@ -119,8 +119,8 @@ Keduanya read-only dan tidak mengirim traffic ke target (ROADMAP §5). Tidak ada
 
 ## Related Skills
 
-- `http-proxy-traffic-analysis` — segmentasi history umum; skill ini fokus perspektif browser.
+- `http-traffic-analysis` — segmentasi history umum; skill ini fokus perspektif browser.
 - `cors-analysis` — rute analisis mendalam perilaku CORS saat tersedia.
 - `web-surface-mapping` — inventaris permukaan dari sisi server.
 - `security-misconfiguration` — rute temuan konfigurasi header.
-- `http-proxy-request-replay` — konfirmasi aktif atas anomali.
+- `http-request-replay` — konfirmasi aktif atas anomali.

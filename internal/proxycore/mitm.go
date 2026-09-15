@@ -106,6 +106,27 @@ func NewMITMProxy(ca *MITMCA, eng *Engine) *MITMProxy {
 	}
 }
 
+// Close releases the in-memory CA and cached leaf private keys at the end of
+// an engagement. It does not persist or revoke certificates; the CA is
+// intentionally ephemeral and becomes unusable after Close.
+func (m *MITMProxy) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for host, leaf := range m.leaves {
+		leaf.PrivateKey = nil
+		leaf.Certificate = nil
+		delete(m.leaves, host)
+	}
+	if m.ca != nil {
+		m.ca.Key = nil
+		m.ca.Cert = nil
+		for i := range m.ca.DER {
+			m.ca.DER[i] = 0
+		}
+		m.ca.DER = nil
+	}
+}
+
 // prefixConn menggabungkan sisa data yang sudah ter-buffer oleh http.Server
 // (mis. ClientHello yang dikirim client segera setelah CONNECT) dengan data
 // berikutnya dari koneksi mentah, sehingga handshake TLS tidak kehilangan byte.
@@ -279,6 +300,9 @@ func (m *MITMProxy) leafFor(host string) (*tls.Certificate, error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.ca == nil || m.ca.Cert == nil || m.ca.Key == nil || len(m.ca.DER) == 0 {
+		return nil, fmt.Errorf("proxycore/mitm: CA sudah ditutup")
+	}
 	if leaf, ok := m.leaves[host]; ok {
 		return leaf, nil
 	}

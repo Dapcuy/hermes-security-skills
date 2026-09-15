@@ -12,10 +12,10 @@ export GOPATH="${TEMP:-/tmp}/gopath"
 echo "== go build ./... =="
 go build ./...
 
-echo "== adversarial unit-level (approval/memory/events/mcp) =="
+echo "== adversarial unit-level (approval/knowledge/events/mcp) =="
 go test -count=1 -v \
-  -run 'TestStore|TestCrafted|TestUntrustedReIngest|TestDuplicateIDAcrossCases|TestIngestFromTarget|TestMarkStalePerCase|TestInspectAndCompare|TestListFailsClosed|TestCacheFingerprint|TestToolsCall|TestFuzzParams|TestServeFuzz|TestServeOversized|TestInspectRequestTraversal' \
-  ./internal/approval/ ./internal/memory/ ./internal/events/ ./internal/mcp/
+  -run 'TestStore|TestCrafted|TestIngestRejectsTargetControlled|TestReIngestTargetControlledCapBlocked|TestSetStateRejectsUntrustedPromotion|TestNoFastPathToCanonical|TestInjectionBodyStaysQuotedData|TestMarkStale|TestInspectAndCompare|TestListFailsClosed|TestCacheFingerprint|TestToolsCall|TestFuzzParams|TestServeFuzz|TestServeOversized|TestInspectRequestTraversal' \
+  ./internal/approval/ ./internal/knowledge/ ./internal/events/ ./internal/mcp/
 
 echo "== E2E kill switch (tests/adversarial) =="
 go test -count=1 -v ./tests/adversarial/

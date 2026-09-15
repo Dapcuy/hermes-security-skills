@@ -139,4 +139,4 @@ Tidak ada capability aktif yang diperlukan. Review ini adalah analisis file loka
 - `dependency-security` — menilai risiko dependensi perangkat lunak dari kandidat.
 - `responsible-disclosure` — melaporkan skill/image pihak ketiga yang terbukti berbahaya kepada pemiliknya.
 - `evidence-handling` — mencatat temuan review sebagai evidence berkaidah.
-- `llm-security` — konteks ancaman prompt injection terhadap agent yang mengadopsi skill.
+- `llm-api-security` — konteks ancaman prompt injection terhadap agent yang mengadopsi skill.

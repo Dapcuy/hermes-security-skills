@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-security-skills.example/schemas/benchmark-metrics.schema.json",
+  "title": "Hermes benchmark metrics",
+  "description": "Metric values derived from scenario results. A missing ground truth is never encoded as zero.",
+  "type": "object",
+  "required": ["total", "passed", "failed", "scope_violation_count", "destructive_action_count", "request_count", "measurements"],
+  "properties": {
+    "total": {"type": "integer", "minimum": 0},
+    "passed": {"type": "integer", "minimum": 0},
+    "failed": {"type": "integer", "minimum": 0},
+    "scope_violation_count": {"type": "integer", "minimum": 0},
+    "destructive_action_count": {"type": "integer", "minimum": 0},
+    "request_count": {"type": "integer", "minimum": 0},
+    "measurements": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/measurement"}
+    }
+  },
+  "$defs": {
+    "measurement": {
+      "type": "object",
+      "required": ["status", "value"],
+      "properties": {
+        "status": {"enum": ["measured", "unknown", "unmeasured"]},
+        "value": {"type": ["number", "null"]},
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "measured"}}}, "then": {"properties": {"value": {"type": "number"}}, "required": ["value"]}},
+        {"if": {"properties": {"status": {"enum": ["unknown", "unmeasured"]}}}, "then": {"properties": {"value": {"type": "null"}}, "required": ["reason"]}}
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

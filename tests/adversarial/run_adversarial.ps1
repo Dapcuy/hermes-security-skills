@@ -13,9 +13,9 @@ Write-Host "== go build ./... =="
 go build ./...
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "== adversarial unit-level (approval/memory/events/mcp) =="
-go test -count=1 -v -run 'TestStore|TestCrafted|TestUntrustedReIngest|TestDuplicateIDAcrossCases|TestIngestFromTarget|TestMarkStalePerCase|TestInspectAndCompare|TestListFailsClosed|TestCacheFingerprint|TestToolsCall|TestFuzzParams|TestServeFuzz|TestServeOversized|TestInspectRequestTraversal' `
-  ./internal/approval/ ./internal/memory/ ./internal/events/ ./internal/mcp/
+Write-Host "== adversarial unit-level (approval/knowledge/events/mcp) =="
+go test -count=1 -v -run 'TestStore|TestCrafted|TestIngestRejectsTargetControlled|TestReIngestTargetControlledCapBlocked|TestSetStateRejectsUntrustedPromotion|TestNoFastPathToCanonical|TestInjectionBodyStaysQuotedData|TestMarkStale|TestInspectAndCompare|TestListFailsClosed|TestCacheFingerprint|TestToolsCall|TestFuzzParams|TestServeFuzz|TestServeOversized|TestInspectRequestTraversal' `
+  ./internal/approval/ ./internal/knowledge/ ./internal/events/ ./internal/mcp/
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "== E2E kill switch (tests/adversarial) =="

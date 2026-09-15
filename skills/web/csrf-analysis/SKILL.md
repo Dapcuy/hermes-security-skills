@@ -49,7 +49,7 @@ requires_credentials: true
 
 ## Required Capabilities
 
-- `list_history` — menginventarisasi request state-changing beserta token dan cookie yang menyertainya.
+
 - `inspect_request` — memeriksa header Cookie, field token, dan header Origin/Referer pada request terekam.
 - `request_replay` — menjalankan ulang aksi state-changing dengan satu variasi per iterasi: tanpa token, token salah, konteks akun berbeda.
 - `response_comparison` — membandingkan hasil antar variasi untuk menilai validasi server.
@@ -142,6 +142,6 @@ requires_credentials: true
 - `web-authorization` — pembeda: authorization menjawab "boleh akun ini", CSRF menjawab "apakah ini kemauan user".
 - `idor-and-bola` — differential antar akun dengan pola serupa pada object authorization.
 - `web-authentication` — konteks sesi dan login CSRF.
-- `http-proxy-request-replay`, `http-proxy-response-comparison` — operasi inti yang dipakai.
+- `http-request-replay`, `http-response-comparison` — operasi inti yang dipakai.
 - `false-positive-analysis` — triase sebelum status naik.
 - `vulnerability-validation` — kerangka lifecycle finding (ROADMAP §26).

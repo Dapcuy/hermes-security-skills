@@ -116,6 +116,21 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestResolveQualifiesRegistry(t *testing.T) {
+	content := strings.Replace(manifestFixture, "ghcr.io/<owner>", "ghcr.io/acme", 1)
+	m, err := Load(writeFixture(t, content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.Resolve("http-response-comparison")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ghcr.io/acme/hermes-validator-http:0.1.0" {
+		t.Fatalf("qualified ref = %q", got)
+	}
+}
+
 func TestLoadManifestFailClosed(t *testing.T) {
 	cases := []struct {
 		name string

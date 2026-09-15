@@ -58,7 +58,7 @@ Skill ini tidak meminta capability aktif. Ia peta metodologi dan router: seluruh
 1. Klasifikasikan permukaan API dan auth scheme-nya dari inventaris yang ada.
 2. Urutkan area masalah berdasarkan dampak dan kesiapan data: authorization lebih dulu (dampak tertinggi, diskriminan jelas), lalu input, lalu pembatasan laju.
 3. Rutekan tiap area: object-level → idor-and-bola; function-level → bfla; peran dan resource → web-authorization; input → payload-selection lalu injection-validation; drift spec → openapi-analysis.
-4. Untuk mass assignment, susun rencana: satu field tambahan per iterasi, replay terkontrol, bandingkan respons — rutekan ke http-proxy-request-mutation.
+4. Untuk mass assignment, susun rencana: satu field tambahan per iterasi, replay terkontrol, bandingkan respons — rutekan ke http-request-mutation.
 5. Catat area yang tidak bisa diuji (tanpa akun, tanpa baseline) sebagai gap yang eksplisit.
 6. Perbarui rute seiring hasil: temuan di satu area sering membuka area lain — mis. BOLA menandai endpoint yang juga layak dicek mass assignment.
 
@@ -116,5 +116,5 @@ Skill ini tidak meminta capability aktif. Ia peta metodologi dan router: seluruh
 - `web-authorization` — rute peran dan resource.
 - `openapi-analysis` — rute documentation drift dan sumber inventaris.
 - `payload-selection`, `injection-validation` — rute input validation.
-- `http-proxy-request-mutation` — rute uji mass assignment.
+- `http-request-mutation` — rute uji mass assignment.
 - `api-rate-limit-analysis`, `graphql-security`, `rest-api-testing` — rute area lanjutan saat skill tersedia.

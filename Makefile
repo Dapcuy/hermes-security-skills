@@ -10,9 +10,9 @@
 SHELL := /bin/bash
 
 # Nama direktori image (bukan nama image final — lihat image-manifest.yaml)
-IMAGE_NAMES := http-validator json-validator openapi-validator python-validator proxy tool-nuclei
+IMAGE_NAMES := http-validator json-validator openapi-validator python-validator proxy tool-nuclei tool-subfinder tool-httpx tool-nmap tool-ffuf
 
-.PHONY: help go-build go-test go-vet lint-skills docker-build
+.PHONY: help go-build go-test go-vet lint-skills docker-lint docker-build
 
 help: ## Tampilkan daftar target
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -28,6 +28,9 @@ go-vet: ## go vet untuk semua package Go
 
 lint-skills: ## Validasi skills/ dengan skill-linter (§7.1)
 	python tools/skill-linter/lint.py skills/
+
+docker-lint: ## Validasi semua Dockerfile memakai digest immutable
+	python tools/docker-linter/check.py runtimes/docker/images
 
 docker-build: ## Build semua image secara lokal (context = root repo)
 	@set -e; for name in $(IMAGE_NAMES); do \

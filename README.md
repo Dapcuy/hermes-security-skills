@@ -1,6 +1,6 @@
 # Hermes Security Skills
 
-Modular security reasoning and validation skill pack untuk Hermes.
+Modular **Web/API security** reasoning and validation skill pack untuk Hermes (sejak v3.0 fokus project adalah Web/API — lihat `docs/adr/ADR-012.md`).
 
 Fokus project ini **bukan** autonomous pentest framework. Fokusnya adalah membuat Hermes lebih mampu:
 
@@ -21,10 +21,12 @@ Fokus project ini **bukan** autonomous pentest framework. Fokusnya adalah membua
 Skills teach.
 Hermes reasons.
 Policy decides — and enforces, not merely advises.
-Proxy observes and interacts.
-Docker validates.
+Capabilities abstract operations.
+Proxy observes and interacts — and is the only egress.
+Docker isolates execution.
+Tools are curated, pinned, signed dependencies.
 Evidence proves.
-Memory preserves knowledge.
+Knowledge provides trusted reference — it is not agent memory.
 Credentials never touch the reasoning context.
 User authorizes.
 ```
@@ -57,7 +59,7 @@ Empat perintah di atas setara dengan target Makefile `go-build`, `go-test`,
 `lint-skills`, dan `docker-build`. Target lain: `go-vet` = `go vet ./...`.
 Catatan: lab environment (dulu di `labs/`) dihapus pasca-benchmark sesuai
 keputusan owner — repo fokus pada skill + tool + runtime; kebutuhan lab
-mendatang memakai repo terpisah (lihat `ROADMAP.md` §42/§43 dan
+mendatang memakai repo terpisah (lihat `ROADMAP.md` §63 dan
 `benchmarks/RESULTS.md`).
 
 Coba hermes-proxy (replay engine) end-to-end — satu perintah, bisa
@@ -70,6 +72,13 @@ powershell -ExecutionPolicy Bypass -File scripts\demo-e2e.ps1   # PowerShell
 
 Langkah manual Mode 1 dan Mode 2 (TLS MITM) ada di
 [`cmd/hermes-proxy/README.md`](cmd/hermes-proxy/README.md).
+
+Backup/restore offline, retention fail-closed, dan deployment Compose production
+ada di [`docs/deployment.md`](docs/deployment.md).
+
+Monitoring internal, Prometheus alert rules, log rotation, maintenance scheduler,
+dan controlled rollback ada di [`deploy/monitoring/README.md`](deploy/monitoring/README.md)
+dan [`docs/operations.md`](docs/operations.md).
 
 ## Ringkasan Arsitektur
 
@@ -143,8 +152,14 @@ Credential Provider:
   penyimpanan dan injeksi kredensial tanpa
   melalui konteks reasoning
 
-Memory:
-  case knowledge dan reviewed experience
+Tool Registry:
+  third-party tools sebagai curated dependency:
+  dedicated image, pinned digest, wrapper fail-closed
+  (ADR-011) — katalog tool hanyalah kandidat
+
+Knowledge:
+  curated trusted reference — bukan memori agent;
+  state kasus hidup di evidence + jobs + approval
 ```
 
 Konsekuensi penting dari arsitektur ini:
@@ -152,23 +167,24 @@ Konsekuensi penting dari arsitektur ini:
 - **Validator Docker berjalan dengan `network: none`** pada MVP — validator tidak melakukan fetch ke manapun dan hanya menganalisis data yang sudah ada.
 - **`hermes-proxy` adalah satu-satunya komponen dengan privilege egress.** Semua traffic keluar ke target dikonsolidasikan di satu choke point yang policy-nya in-line (dievaluasi di dalam proxy container, dengan TOCTOU re-validation saat eksekusi).
 - **Kredensial tidak pernah masuk konteks LLM.** Skill dan approval hanya merujuk *credential reference*; injection dilakukan control plane saat eksekusi.
-- **Konten target adalah data, bukan instruksi.** Prompt injection dan content trust ditangani sebagai first-class concern (structural separation, content quarantine, knowledge firewall, policy firewall).
-- Versi arsitektur final (dengan supporting components di luar reasoning path) dijelaskan di `ROADMAP.md` §47.
+- **Konten target adalah data, bukan instruksi.** Prompt injection dan content trust ditangani sebagai first-class concern (structural separation, content quarantine, knowledge firewall, policy firewall) — konten target tidak pernah masuk knowledge base (firewall ingest fail-closed, ADR-008 + ROADMAP §20/§23).
+- Versi arsitektur final (dengan supporting components di luar reasoning path) dijelaskan di `ROADMAP.md` §67.
 
 ## Batasan Project
 
+Fokus project adalah **Web/API security** (scope boundary resmi:
+`docs/adr/ADR-012.md`). Tool atau metodologi di luar domain hanya dapat
+dipertimbangkan sebagai future scope yang disetujui owner.
+
 ### In-Scope
 
-- Security methodology.
-- Bug bounty reasoning.
-- Web dan API analysis.
-- HTTP traffic analysis.
-- Controlled validation.
-- Source review guidance.
-- Evidence handling.
-- Finding triage.
-- Report generation.
-- Knowledge dan memory management.
+- Web, API, dan HTTP analysis (termasuk GraphQL, JWT, OAuth/OIDC).
+- Authentication, authorization, dan business-logic analysis.
+- Injection, SSRF, file upload, CORS, CSRF, webhooks, rate limiting.
+- Security misconfiguration dan HTTP traffic analysis.
+- Controlled vulnerability validation.
+- Evidence handling, finding triage, dan report generation.
+- Knowledge base curation (curated reference — bukan memori agent).
 
 ### Non-Goals
 
@@ -184,6 +200,8 @@ Project ini **tidak ditujukan untuk**:
 - Automatic public disclosure.
 - Automatic vulnerability submission tanpa human approval.
 - Menganggap payload berhasil sebagai vulnerability valid.
+- Domain di luar Web/API: wireless, mobile, binary, firmware — ditunda
+  (deferred) sesuai ADR-012, dibuka hanya sebagai future scope.
 
 ## Deployment Prerequisites Hermes — SYARAT KEAMANAN (WAJIB DIBACA)
 
@@ -223,24 +241,25 @@ hermes-security-skills/
 ├── CONTRIBUTING.md      panduan kontribusi
 ├── LICENSE              MIT
 ├── docs/
-│   ├── adr/             Architecture Decision Records (ADR-001..010)
+│   ├── adr/             Architecture Decision Records (ADR-001..012)
 │   ├── security-model.md
 │   └── threat-model.md
-├── skills/              skill pack per kategori (core, recon, http, web, api, ...)
+├── skills/              skill pack per kategori (core, http, web, api,
+│                        business-logic, discovery, specialized)
 ├── capabilities/        capability registry + schemas
 ├── policy/              authorization, scope, risk, approval, limits
 ├── runtimes/            docker/, proxy/, local/ (runtime adapters + images)
 ├── validators/          validator logic per domain
 ├── schemas/             JSON Schema (execution-plan, validation-task, evidence, ...)
-├── tools/               skill-linter dan tooling lain
-├── memory/              case memory (global/ + cases/)
-├── knowledge/           canonical, methodology, false-positives, ...
+├── tools/               skill-linter, Tool Registry (registry.yaml), dan tooling lain
+├── knowledge/           knowledge base curated: canonical, research,
+│                        methodology, false-positives, reviewed
 ├── references/          referensi eksternal
 ├── templates/           template output (finding, report)
 └── tests/               pengujian
 ```
 
-Catatan: credential store **tidak ada di repo** — lokasinya di luar (OS keychain / encrypted external store). Detail credential management ada di `ROADMAP.md` §23 dan `docs/security-model.md`.
+Catatan: credential store **tidak ada di repo** — lokasinya di luar (OS keychain / encrypted external store). Detail credential management ada di `ROADMAP.md` §19 dan `docs/security-model.md`.
 
 ## Dokumentasi Utama
 

@@ -17,6 +17,7 @@ import (
 	"hermes-security-skills/internal/policy"
 	"hermes-security-skills/internal/proxycore"
 	"hermes-security-skills/internal/scope"
+	"hermes-security-skills/internal/toolregistry"
 )
 
 // testPolicy: policy in-memory (automatic/conditional/approval_required/
@@ -35,7 +36,8 @@ func testPolicy() *policy.Policy {
 	}
 }
 
-// registry dari map capability (tanpa file).
+// registry dari map capability (tanpa file) — mirror capabilities/registry.yaml
+// v3.0 (§12). list_history BUKAN capability lagi: ia MCP tool kontrol.
 func testRegistry(t *testing.T, extra map[string]any) *capability.Registry {
 	t.Helper()
 	caps := map[string]any{
@@ -48,13 +50,9 @@ func testRegistry(t *testing.T, extra map[string]any) *capability.Registry {
 			"risk": "low", "default_provider": "proxy",
 			"requires_scope": true, "requires_network": false,
 		},
-		"list_history": map[string]any{
-			"risk": "low", "default_provider": "proxy",
-			"requires_scope": false, "requires_network": false,
-		},
 		"response_comparison": map[string]any{
-			"risk": "low", "default_provider": "proxy",
-			"requires_scope": true, "requires_network": false,
+			"risk": "low", "default_provider": "local",
+			"requires_scope": false, "requires_network": false,
 		},
 		"json_diff": map[string]any{
 			"risk": "low", "default_provider": "local",
@@ -67,6 +65,63 @@ func testRegistry(t *testing.T, extra map[string]any) *capability.Registry {
 	reg, err := capability.FromMap(map[string]any{"capabilities": caps})
 	if err != nil {
 		t.Fatalf("registry test: %v", err)
+	}
+	return reg
+}
+
+// testToolRegistry: Tool Registry fixture inline (mirror tools/registry.yaml
+// §36, tanpa file) — endpoint_discovery 4 tool + template_based_validation 1.
+func testToolRegistry(t *testing.T) *toolregistry.Registry {
+	t.Helper()
+	reg, err := toolregistry.FromMap(map[string]any{"tools": map[string]any{
+		"httpx": map[string]any{
+			"name": "httpx", "category": "url-probing",
+			"image": "hermes-tool-httpx", "version": "1.12.0",
+			"digest":             "sha256:6e8e333d2ea9a91ae270f3d7a0bff4a86a653b7fab37b57270ea9526af1f19ae",
+			"signature_required": true, "risk": "low", "provider": "docker",
+			"capability":          "endpoint_discovery",
+			"network_requirement": "target-http", "approval_requirement": "automatic",
+			"evidence_parser": "validation-result-json",
+		},
+		"subfinder": map[string]any{
+			"name": "subfinder", "category": "attack-surface-discovery",
+			"image": "hermes-tool-subfinder", "version": "2.16.0",
+			"digest":             "sha256:bb07df77bb3b891e93aa84a8425d19d6931c28d5351575a575a34dd15fb19abe",
+			"signature_required": true, "risk": "low", "provider": "docker",
+			"capability":          "endpoint_discovery",
+			"network_requirement": "third-party-passive-sources", "approval_requirement": "automatic",
+			"evidence_parser": "validation-result-json",
+		},
+		"nmap": map[string]any{
+			"name": "nmap", "category": "port-scanning",
+			"image": "hermes-tool-nmap", "version": "7.93",
+			"digest":             "sha256:6b9054dcea800cc5cbbece3bb4adccb2c14f048ea77557abdaf644021183ae4d",
+			"signature_required": true, "risk": "high", "provider": "docker",
+			"capability":          "endpoint_discovery",
+			"network_requirement": "target-connect-scan", "approval_requirement": "always",
+			"evidence_parser": "validation-result-json",
+		},
+		"ffuf": map[string]any{
+			"name": "ffuf", "category": "content-discovery",
+			"image": "hermes-tool-ffuf", "version": "2.3.0",
+			"digest":             "sha256:637bb1aa7d92403abf182fb0be6edd433ac8eb7dfe4a1edd9691ef486b42d5cf",
+			"signature_required": true, "risk": "medium", "provider": "docker",
+			"capability":          "endpoint_discovery",
+			"network_requirement": "target-http", "approval_requirement": "conditional",
+			"evidence_parser": "validation-result-json",
+		},
+		"nuclei": map[string]any{
+			"name": "nuclei", "category": "vulnerability-detection",
+			"image": "hermes-tool-nuclei", "version": "3.3.9",
+			"digest":             "-",
+			"signature_required": true, "risk": "medium", "provider": "docker",
+			"capability":          "template_based_validation",
+			"network_requirement": "target-http", "approval_requirement": "conditional",
+			"evidence_parser": "validation-result-json", "templates_version": "v10.4.8",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("toolregistry test: %v", err)
 	}
 	return reg
 }
@@ -243,8 +298,34 @@ func TestToolsListOneToolPerCapability(t *testing.T) {
 	resps := runServer(t, srv, mustRequest(t, 2, "tools/list", nil))
 	res := resps[0]["result"].(map[string]any)
 	tools, _ := res["tools"].([]any)
-	if len(tools) != 5 { // request_replay, inspect_request, list_history, response_comparison, json_diff
-		t.Fatalf("mau 5 tool, dapat %d", len(tools))
+	// 4 capability (request_replay, inspect_request, response_comparison,
+	// json_diff) + 5 tool kontrol (list_history, validate_scope,
+	// run_validator, abort_case, select_payload) — SEMUA ber-prefix security.* (§6).
+	if len(tools) != 9 {
+		t.Fatalf("mau 8 tool, dapat %d", len(tools))
+	}
+	prefixed := map[string]bool{}
+	for _, raw := range tools {
+		tl := raw.(map[string]any)
+		name, _ := tl["name"].(string)
+		if !strings.HasPrefix(name, "security.") {
+			t.Errorf("tool %q tidak ber-prefix security.* (ROADMAP v3.0 §6)", name)
+		}
+		prefixed[name] = true
+	}
+	for _, want := range []string{
+		"security.request_replay", "security.inspect_request",
+		"security.response_comparison", "security.json_diff",
+		"security.list_history", "security.validate_scope",
+		"security.run_validator", "security.abort_case", "security.select_payload",
+	} {
+		if !prefixed[want] {
+			t.Errorf("tools/list kurang %q: %v", want, prefixed)
+		}
+	}
+	// Nama lama tanpa prefix TIDAK terdaftar lagi.
+	if prefixed["request_replay"] || prefixed["list_history"] {
+		t.Error("nama lama tanpa prefix security.* tidak boleh terdaftar lagi (§6)")
 	}
 	// Schema: request_replay (network) wajib url+method; list_history punya
 	// schema filter read-only.
@@ -252,20 +333,20 @@ func TestToolsListOneToolPerCapability(t *testing.T) {
 	for _, raw := range tools {
 		tl := raw.(map[string]any)
 		switch tl["name"] {
-		case "request_replay":
+		case "security.request_replay":
 			replaySchema = tl["inputSchema"].(map[string]any)
 			if strings.TrimSpace(tl["description"].(string)) == "" {
 				t.Error("request_replay harus punya description")
 			}
-		case "list_history":
+		case "security.list_history":
 			histSchema = tl["inputSchema"].(map[string]any)
-		case "response_comparison":
+		case "security.response_comparison":
 			schema := tl["inputSchema"].(map[string]any)
 			req, _ := schema["required"].([]any)
 			if len(req) != 2 {
 				t.Errorf("response_comparison required = %v, mau [evidence_ref_a evidence_ref_b]", req)
 			}
-		case "json_diff":
+		case "security.json_diff":
 			schema := tl["inputSchema"].(map[string]any)
 			req, _ := schema["required"].([]any)
 			if len(req) != 2 {
@@ -303,6 +384,14 @@ func TestToolsCallUnknownToolAndUnknownMethod(t *testing.T) {
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("unknown tool harus -32602, dapat %v", resps[0])
 	}
+	// Nama lama TANPA prefix security.* TIDAK terdaftar lagi (§6) —
+	// termasuk nama capability yang masih ada di registry.
+	resps = runServer(t, srv, mustRequest(t, 33, "tools/call", map[string]any{
+		"name": "request_replay", "arguments": map[string]any{},
+	}))
+	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
+		t.Errorf("nama lama tanpa prefix security.* harus -32602, dapat %v", resps[0])
+	}
 	// Unknown method → -32601.
 	resps = runServer(t, srv, mustRequest(t, 4, "bogus/method", nil))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeMethodNotFound) {
@@ -334,7 +423,7 @@ func TestToolsCallDenyCritical(t *testing.T) {
 		},
 	}, nil)
 	resps := runServer(t, srv, mustRequest(t, 5, "tools/call", map[string]any{
-		"name": "credential_attack",
+		"name": "security.credential_attack",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/", "method": "GET",
 		},
@@ -356,7 +445,7 @@ func TestToolsCallDenyPostWithoutApproval(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	// POST → risk HIGH → approval_required → ditolak (approval store kosong).
 	resps := runServer(t, srv, mustRequest(t, 6, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/login", "method": "POST",
 			"body": "user=a&pass=b",
@@ -382,7 +471,7 @@ func TestToolsCallDenyScopeLoopback(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	// IP literal loopback ditolak keras oleh scope (§8) walau GET.
 	resps := runServer(t, srv, mustRequest(t, 8, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://127.0.0.1:8901/", "method": "GET",
 		},
@@ -431,7 +520,7 @@ func TestToolsCallForwardedViaProxyWithApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	resps := runServer(t, srv, mustRequest(t, 9, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/orders/1", "method": "GET",
 			"case": "case-demo",
@@ -462,7 +551,7 @@ func TestToolsCallForwardedViaProxyWithApproval(t *testing.T) {
 func TestToolsCallConditionalDeniedWithoutApproval(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 10, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/", "method": "GET",
 		},
@@ -491,7 +580,7 @@ func TestToolsCallAbortedCaseDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 	resps := runServer(t, srv, mustRequest(t, 11, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": "http://localhost:8901/", "method": "GET", "case": "case-abort",
 		},
@@ -507,7 +596,7 @@ func TestToolsCallAbortedCaseDenied(t *testing.T) {
 func TestToolsCallListHistoryFromEventStore(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 12, "tools/call", map[string]any{
-		"name": "list_history", "arguments": map[string]any{},
+		"name": "security.list_history", "arguments": map[string]any{},
 	}))
 	res, ok := resps[0]["result"].(map[string]any)
 	if !ok || res["isError"] == true {
@@ -549,7 +638,7 @@ func TestToolsCallListHistoryFromEventStore(t *testing.T) {
 func TestToolsCallListHistoryFilterAndLimit(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 20, "tools/call", map[string]any{
-		"name": "list_history",
+		"name": "security.list_history",
 		"arguments": map[string]any{
 			"url_substring": "orders/1/status", "method": "post", "status_min": 300,
 		},
@@ -569,7 +658,7 @@ func TestToolsCallListHistoryFilterAndLimit(t *testing.T) {
 	}
 	// Limit mempertahankan entri terbaru.
 	resps = runServer(t, srv, mustRequest(t, 21, "tools/call", map[string]any{
-		"name": "list_history", "arguments": map[string]any{"limit": 1},
+		"name": "security.list_history", "arguments": map[string]any{"limit": 1},
 	}))
 	content = resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)
 	if err := json.Unmarshal([]byte(content["text"].(string)), &body); err != nil {
@@ -615,13 +704,13 @@ func TestToolsCallListHistoryCaseFilter(t *testing.T) {
 	srv, _ := newTestServer(t, nil, func(c *Config) { c.EvidenceDir = dir })
 	resps := runServer(t, srv,
 		mustRequest(t, 30, "tools/call", map[string]any{
-			"name": "list_history", "arguments": map[string]any{"case": "mem-demo"},
+			"name": "security.list_history", "arguments": map[string]any{"case": "mem-demo"},
 		}),
 		mustRequest(t, 31, "tools/call", map[string]any{
-			"name": "list_history", "arguments": map[string]any{"case": "tidak-ada"},
+			"name": "security.list_history", "arguments": map[string]any{"case": "tidak-ada"},
 		}),
 		mustRequest(t, 32, "tools/call", map[string]any{
-			"name": "list_history", "arguments": map[string]any{},
+			"name": "security.list_history", "arguments": map[string]any{},
 		}),
 	)
 	type histBody struct {
@@ -664,7 +753,7 @@ func TestToolsCallListHistoryCaseFilter(t *testing.T) {
 func TestToolsCallInspectRequestFromEventStore(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 22, "tools/call", map[string]any{
-		"name": "inspect_request",
+		"name": "security.inspect_request",
 		"arguments": map[string]any{
 			"evidence_ref": "evidence-000001.json",
 		},
@@ -712,21 +801,21 @@ func TestToolsCallInspectRequestFailClosed(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	// Ref tidak ada → -32602.
 	resps := runServer(t, srv, mustRequest(t, 23, "tools/call", map[string]any{
-		"name": "inspect_request", "arguments": map[string]any{"evidence_ref": "evidence-999999.json"},
+		"name": "security.inspect_request", "arguments": map[string]any{"evidence_ref": "evidence-999999.json"},
 	}))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("ref tidak ada harus -32602, dapat %v", resps[0])
 	}
 	// Path traversal ditolak.
 	resps = runServer(t, srv, mustRequest(t, 24, "tools/call", map[string]any{
-		"name": "inspect_request", "arguments": map[string]any{"evidence_ref": "../evidence-000001.json"},
+		"name": "security.inspect_request", "arguments": map[string]any{"evidence_ref": "../evidence-000001.json"},
 	}))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("path traversal harus -32602, dapat %v", resps[0])
 	}
 	// Argumen hilang.
 	resps = runServer(t, srv, mustRequest(t, 25, "tools/call", map[string]any{
-		"name": "inspect_request", "arguments": map[string]any{},
+		"name": "security.inspect_request", "arguments": map[string]any{},
 	}))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("evidence_ref hilang harus -32602, dapat %v", resps[0])
@@ -736,7 +825,7 @@ func TestToolsCallInspectRequestFailClosed(t *testing.T) {
 func TestToolsCallResponseComparisonRealDiff(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 26, "tools/call", map[string]any{
-		"name": "response_comparison",
+		"name": "security.response_comparison",
 		"arguments": map[string]any{
 			"evidence_ref_a": "evidence-000001.json",
 			"evidence_ref_b": "evidence-000002.json",
@@ -777,7 +866,7 @@ func TestToolsCallResponseComparisonRealDiff(t *testing.T) {
 func TestToolsCallJSONDiffReal(t *testing.T) {
 	srv, _ := newTestServer(t, nil, nil)
 	resps := runServer(t, srv, mustRequest(t, 27, "tools/call", map[string]any{
-		"name": "json_diff",
+		"name": "security.json_diff",
 		"arguments": map[string]any{
 			"json_a": map[string]any{"a": 1, "b": "sama"},
 			"json_b": map[string]any{"a": 2, "b": "sama"},
@@ -808,7 +897,7 @@ func TestToolsCallJSONDiffReal(t *testing.T) {
 	}
 	// Identik = kosong; argumen hilang = -32602.
 	resps = runServer(t, srv, mustRequest(t, 28, "tools/call", map[string]any{
-		"name": "json_diff",
+		"name": "security.json_diff",
 		"arguments": map[string]any{
 			"json_a": map[string]any{"a": 1}, "json_b": map[string]any{"a": 1},
 		},
@@ -821,7 +910,7 @@ func TestToolsCallJSONDiffReal(t *testing.T) {
 		t.Errorf("json identik harus tanpa observation: %#v", body.Observations)
 	}
 	resps = runServer(t, srv, mustRequest(t, 29, "tools/call", map[string]any{
-		"name": "json_diff", "arguments": map[string]any{"json_a": map[string]any{}},
+		"name": "security.json_diff", "arguments": map[string]any{"json_a": map[string]any{}},
 	}))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("json_b hilang harus -32602, dapat %v", resps[0])
@@ -838,7 +927,7 @@ func TestToolsCallReadOnlyFallbackStub(t *testing.T) {
 		},
 	}, nil)
 	resps := runServer(t, srv, mustRequest(t, 30, "tools/call", map[string]any{
-		"name": "openapi_analysis", "arguments": map[string]any{},
+		"name": "security.openapi_analysis", "arguments": map[string]any{},
 	}))
 	res, ok := resps[0]["result"].(map[string]any)
 	if !ok || res["isError"] == true {
@@ -858,7 +947,7 @@ func TestToolsCallReadOnlyAbortedCaseDenied(t *testing.T) {
 	}
 	srv, _ := newTestServer(t, nil, func(c *Config) { c.JobsDir = jobsRoot })
 	resps := runServer(t, srv, mustRequest(t, 31, "tools/call", map[string]any{
-		"name":      "list_history",
+		"name":      "security.list_history",
 		"arguments": map[string]any{"case": "case-abort"},
 	}))
 	res, ok := resps[0]["result"].(map[string]any)
@@ -876,7 +965,7 @@ func TestToolsCallReadOnlyAbortedCaseDenied(t *testing.T) {
 func TestToolsCallEventStoreWithoutEvidenceDir(t *testing.T) {
 	srv, _ := newTestServer(t, nil, func(c *Config) { c.EvidenceDir = "" })
 	resps := runServer(t, srv, mustRequest(t, 32, "tools/call", map[string]any{
-		"name": "list_history", "arguments": map[string]any{},
+		"name": "security.list_history", "arguments": map[string]any{},
 	}))
 	if e, ok := resps[0]["error"].(map[string]any); !ok || e["code"] != float64(codeInvalidParams) {
 		t.Errorf("evidence-dir kosong harus -32602, dapat %v", resps[0])
@@ -896,7 +985,7 @@ func TestToolsCallProxyDownFailClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	resps := runServer(t, srv, mustRequest(t, 13, "tools/call", map[string]any{
-		"name":      "request_replay",
+		"name":      "security.request_replay",
 		"arguments": map[string]any{"url": "http://localhost:8901/", "method": "GET", "case": "c"},
 	}))
 	res := resps[0]["result"].(map[string]any)

@@ -48,7 +48,7 @@ risk: medium
 
 ## Required Capabilities
 
-- `list_history` — mengumpulkan baseline upload dan penyajian file yang terekam.
+
 - `inspect_request` — membedah multipart request: field, content-type, nama file, dan struktur body.
 - `request_replay` — mengulang upload dengan satu variasi uji per iterasi (mismatch header, extension ganda, nama file traversal).
 - `response_comparison` — membandingkan penolakan atau penerimaan antar variasi dan perilaku penyajian antar file.
@@ -133,7 +133,7 @@ risk: medium
 ## Related Skills
 
 - `web-surface-mapping` — inventaris fitur upload.
-- `http-proxy-request-replay`, `http-proxy-response-comparison` — operasi inti yang dipakai.
+- `http-request-replay`, `http-response-comparison` — operasi inti yang dipakai.
 - `security-misconfiguration` — konfigurasi penyajian file dan header keamanan.
 - `controlled-fuzzing` — input variation terkontrol setelah pipeline upload dipahami.
 - `false-positive-analysis`, `vulnerability-validation` — triase dan lifecycle finding.

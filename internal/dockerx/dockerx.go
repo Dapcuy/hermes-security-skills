@@ -181,6 +181,13 @@ type RunSpec struct {
 	Timeout time.Duration
 	// Name --name container; divalidasi terhadap charset Docker.
 	Name string
+	// Network mode container. Kosong = "none" (default fail-closed §16).
+	// Nilai yang didukung: "none" (validator, §16 — tanpa jaringan) dan
+	// "bridge" (HANYA untuk image tool pihak ketiga ber-wrapper fail-closed
+	// — wrapper memverifikasi policy bundle + scope check SETIAP target dari
+	// bundle sebelum tool dieksekusi, ROADMAP §39; egress terarah via proxy
+	// adalah post-MVP §32). "host" DILARANG keras (§32).
+	Network string
 }
 
 // validContainerName: charset nama container Docker
@@ -235,13 +242,25 @@ func buildRunArgs(spec RunSpec) ([]string, error) {
 	if caseID == "" {
 		return nil, fmt.Errorf("dockerx: RunSpec.Labels wajib berisi %s=<case-id> (prasyarat kill switch §10)", LabelCase)
 	}
+	// Network mode: default fail-closed "none" (§16). "host" dilarang keras
+	// (§32); hanya tool image ber-wrapper fail-closed yang boleh "bridge"
+	// (§39 — scope check per target ada di wrapper, bukan di baseline ini).
+	net := strings.TrimSpace(spec.Network)
+	if net == "" {
+		net = "none"
+	}
+	switch net {
+	case "none", "bridge":
+	default:
+		return nil, fmt.Errorf("dockerx: RunSpec.Network %q tidak didukung (hanya \"none\" atau \"bridge\"; \"host\" dilarang §32)", spec.Network)
+	}
 
 	args := make([]string, 0, 32+len(spec.Cmd)+2*len(spec.Env)+2*len(spec.Labels))
 	args = append(args, "run", "--rm")
 	args = append(args, "--name", spec.Name)
 
 	// --- Baseline security §15 ---
-	args = append(args, "--network", "none")                        // §16 — deny-by-default
+	args = append(args, "--network", net)                           // §16 — deny-by-default (bridge hanya tool wrapper §39)
 	args = append(args, "--read-only")                              // rootfs read-only
 	args = append(args, "--cap-drop", "ALL")                        // tanpa capability
 	args = append(args, "--security-opt", "no-new-privileges:true") // tanpa eskalasi
@@ -305,6 +324,13 @@ func Run(ctx context.Context, spec RunSpec) ([]byte, error) {
 	return runWith(defaultExecer, ctx, spec)
 }
 
+// RunWith seperti Run, tetapi memakai Execer eksplisit — dipakai pemanggil
+// yang menyuntik exec helper (unit test / embed). Produksi tetap memakai
+// Run (CLIExecer default).
+func RunWith(x Execer, ctx context.Context, spec RunSpec) ([]byte, error) {
+	return runWith(x, ctx, spec)
+}
+
 func runWith(x Execer, ctx context.Context, spec RunSpec) ([]byte, error) {
 	args, err := buildRunArgs(spec)
 	if err != nil {
@@ -337,6 +363,9 @@ func removeContainer(x Execer, name string) {
 // Dipakai validate untuk fail-closed SEBELUM run dengan pesan yang jelas.
 func ImageExists(ref string) (bool, error) { return imageExists(defaultExecer, ref) }
 
+// ImageExistsWith seperti ImageExists dengan Execer eksplisit (injectable).
+func ImageExistsWith(x Execer, ref string) (bool, error) { return imageExists(x, ref) }
+
 func imageExists(x Execer, ref string) (bool, error) {
 	if strings.TrimSpace(ref) == "" {
 		return false, errors.New("dockerx: ref image kosong")
@@ -357,6 +386,12 @@ func imageExists(x Execer, ref string) (bool, error) {
 // yang berjalan saat abort wajib di-kill dan dibersihkan).
 // Mengembalikan jumlah container yang di-remove.
 func RemoveByLabel(label string) (int, error) { return removeByLabel(defaultExecer, label) }
+
+// RemoveByLabelWith seperti RemoveByLabel dengan Execer eksplisit (injectable).
+func RemoveByLabelWith(x Execer, label string) (int, error) { return removeByLabel(x, label) }
+
+// AvailableWith seperti Available dengan Execer eksplisit (injectable).
+func AvailableWith(x Execer) error { return available(x) }
 
 func removeByLabel(x Execer, label string) (int, error) {
 	if !validLabelSelector(label) {

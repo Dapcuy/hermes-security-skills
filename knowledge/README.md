@@ -1,36 +1,49 @@
-# Knowledge Base (ROADMAP §27, §41)
+# Knowledge Base (ROADMAP v3.0 §23, §24, §61)
 
-Struktur direktori:
+Knowledge base adalah **curated reference** — BUKAN memori agent. Sejak
+ROADMAP v3.0, "memory" dihapus sebagai komponen utama project (§24 Why
+Skill > Memory): state kasus hidup di **evidence + jobs + approval +
+events**, bukan di direktori "memori" yang menumpuk state antar
+engagement. Knowledge menjawab "apa yang diketahui dan menjadi
+referensi"; skill menjawab "bagaimana Hermes berpikir"; evidence
+menjelaskan "apa yang benar-benar terjadi".
+
+## Struktur direktori (§23)
 
 ```
 knowledge/
-├── canonical/   — knowledge ter-review penuh (state=trusted)
-├── proposed/    — entry hasil ingestion, menunggu review
-│                  (state=captured|normalized|proposed)
-└── reviewed/    — entry yang sudah lolos human review (state=reviewed)
+├── canonical/        — reference stabil (state=trusted; promosi oleh
+│                       keputusan owner)
+├── research/         — hasil ingest, menunggu review (state=proposed)
+├── methodology/      — curated manual: metodologi & pola reasoning
+├── false-positives/  — curated manual: katalog false positive
+└── reviewed/         — lolos human review (state=reviewed)
 ```
 
-## Prinsip owner — apa yang boleh masuk knowledge
+`research/`, `methodology/`, dan `false-positives/` masing-masing punya
+README yang menjelaskan isi yang sah, siapa yang menulis, dan aturan
+provenance.
+
+## Prinsip isi — apa yang boleh masuk knowledge
 
 ```
 Knowledge HANYA untuk:
-  - pelajaran spesifik-kasus yang sudah direview (state=reviewed)
-  - keputusan yang direview beserta rationale-nya
+  - pengetahuan reference yang sudah direview (state=reviewed/trusted)
+  - pelajaran engagement yang sudah divalidasi + provenance manusia
+  - katalog false positive dan pola metodologi spesifik-kasus
 
-Knowledge BUKAN tempat generalisasi METODOLOGI security.
-Bila pelajaran ternyata generalisasi menjadi metodologi (teknik,
-workflow, kriteria yang berlaku lintas kasus), tulis sebagai SKILL.md
-baru atau perbaiki skill yang ada - curated, versioned, lolos linter
-(ROADMAP §7, §7.1) - bukan sebagai entry knowledge.
+Knowledge BUKAN tempat:
+  - state kasus        -> hidup di jobs/ + evidence + approval + events
+  - metodologi umum    -> tulis sebagai SKILL.md (curated, versioned,
+                          lolos linter — ROADMAP §7, §9)
+  - konten target      -> hidup di evidence (knowledge firewall, §20)
 ```
 
-Prinsip yang sama berlaku sebaliknya untuk memory: memory hanya menyimpan
-state kasus, keputusan, evidence reference, dan approval (lihat
-`memory/README.md`). Contoh penerapan: `lesson-sqli-boolean-differential`
-adalah pelajaran spesifik-kasus engagement Juice Shop - teknik boolean
-differential-nya sudah ter-cover di `skills/web/injection-validation`,
-sehingga entry direlokasi ke `memory/cases/juice-demo/`, bukan dipertahankan
-sebagai entry knowledge.
+Alasan: skill adalah sumber kebenaran metodologi yang direview dan
+ter-versioning; knowledge adalah reference yang ditinjau manusia.
+Mencampur state engagement yang berumur pendek ke dalamnya membuat
+konteks tidak terkontrol menempel antar engagement (persis masalah
+"agent memory" yang dihapus di v3.0).
 
 ## Format entry
 
@@ -53,7 +66,7 @@ provenance:
 Body markdown (definisi, detection signal, false positive, referensi, ...).
 ```
 
-## Lifecycle (§27)
+## Lifecycle (§23)
 
 ```
 captured → normalized → proposed → reviewed → trusted
@@ -65,18 +78,24 @@ captured → normalized → proposed → reviewed → trusted
 
 ```
 hermes-security knowledge ingest <file> --category <c> --source <s> --confidence <f>
-hermes-security knowledge list [--state s]
+hermes-security knowledge list [--state s] [--category c]
 hermes-security knowledge search <query>
 hermes-security knowledge review <id> --state reviewed
 hermes-security knowledge stale
-hermes-security case archive --case <id>
+hermes-security case clean <case-id> [--force]   # case retention = jobs cleanup
 ```
 
-## Knowledge firewall (§24) — PENTING
+## Knowledge firewall (§20, §23) — PENTING
 
 Konten yang berasal dari target (response body, header, error message)
-TIDAK BOLEH masuk direktori ini melalui jalur apapun. Konten target hanya
-boleh menjadi entry state=captured di `memory/cases/<caseID>/` dengan
-provenance `trust: untrusted` — via `memory.Store.IngestFromTarget`.
-Promosi entry untrusted ke reviewed/trusted ditolak fail-closed oleh
-control plane (diverifikasi unit test).
+TIDAK BOLEH masuk direktori ini melalui jalur apapun:
+
+- `knowledge ingest` MENOLAK fail-closed entry dengan
+  `provenance.source: target-controlled` atau `trust: untrusted` —
+  target-controlled content tidak boleh masuk knowledge base; konten
+  target hidup di **evidence** (berprovenance, ber-hash).
+- Entry yang membawa cap `target-controlled` ditolak walau frontmatter-nya
+  memalsukan `trust: trusted` — review manusia yang sah menulis ulang
+  sumbernya (diverifikasi unit test).
+- Entry untrusted yang diletakkan manual tidak bisa dipromosikan ke
+  `reviewed`/`trusted` oleh `knowledge review` (fail-closed).

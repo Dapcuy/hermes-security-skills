@@ -44,7 +44,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — membaca riwayat interaksi terekam dari event store sebagai sumber utama analisis.
+
 - Capability ini read-only dan tidak mengirim traffic ke target; analisis sepenuhnya pasif.
 - Detail per request dibaca melalui jalur evidence yang sudah tersimpan dalam engagement.
 - Bila butuh replay diskriminan, kebutuhan itu menjadi rekomendasi yang dieksekusi skill validasi dengan approvalnya sendiri.
@@ -121,6 +121,6 @@ risk: low
 
 - `business-logic-methodology` — peta rute tujuan hypothesis business logic.
 - `hypothesis-management` — penerima hypothesis yang dihasilkan analisis ini.
-- `http-proxy-traffic-analysis` — analisis traffic yang lebih luas di domain proxy.
+- `http-traffic-analysis` — analisis traffic yang lebih luas di domain proxy.
 - `false-positive-analysis` — checklist penyisiran yang dipakai bersama.
 - `vulnerability-validation` — eksekusi validasi atas hypothesis terpilih.

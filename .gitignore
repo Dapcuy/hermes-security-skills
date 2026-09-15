@@ -27,8 +27,7 @@ venv/
 htmlcov/
 
 # ---- Case & job data (data engagement, tidak pernah masuk repo) ----
-memory/cases/
-memory/global/
+# Sejak v3.0: state kasus hidup di jobs/ (bukan memory/).
 /jobs/
 jobs/*.json
 logs/
@@ -37,7 +36,7 @@ logs/
 # ---- Benchmark results (hasil run, dihasilkan ulang tiap eksekusi §42) ----
 benchmarks/results/
 
-# ---- Database lokal (memory/knowledge pipeline) ----
+# ---- Database lokal (knowledge pipeline, opsional) ----
 *.db
 *.sqlite
 *.sqlite3

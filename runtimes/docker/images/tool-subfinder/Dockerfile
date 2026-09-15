@@ -22,7 +22,7 @@
 # bersamaan. subfinder v2.16.0 butuh Go >= 1.25 (go.mod) → image golang:1.25.
 # §14 — naikkan ke digest pinning saat publish: golang:1.25@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM golang:1.25 AS build
+FROM golang:1.25@sha256:699337d620559a59b4a2bb298ad59611e535d2ee755a34cf2d2a98f37578dc80 AS build
 # CGO_ENABLED=0 — subfinder harus static binary: base runtime distroless STATIC
 # tidak punya dynamic loader (glibc), exec binary dinamis gagal
 # "no such file or directory" saat fork/exec.
@@ -46,7 +46,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 # §14 — digest pinning saat publish:
 #   FROM gcr.io/distroless/static-debian12:nonroot@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 COPY --from=build /go/bin/subfinder /usr/bin/subfinder
 COPY --from=build /out/wrapper /wrapper

@@ -371,7 +371,7 @@ func TestKillSwitchMidExecutionE2E(t *testing.T) {
 
 	// ---- (5) tools/call in-flight ke endpoint lambat (3s).
 	slowCall := cli.callAsync(2, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": targetURL + "/slow", "method": "GET", "case": caseID,
 		},
@@ -450,7 +450,7 @@ func TestKillSwitchMidExecutionE2E(t *testing.T) {
 	// ---- (8) (c) Panggilan BARU ditolak: approval sudah revoked + case
 	// aborted. Dua lapis penolakan harus bekerja.
 	fast := cli.call(3, "tools/call", map[string]any{
-		"name": "request_replay",
+		"name": "security.request_replay",
 		"arguments": map[string]any{
 			"url": targetURL + "/fast", "method": "GET", "case": caseID,
 		},
@@ -468,7 +468,7 @@ func TestKillSwitchMidExecutionE2E(t *testing.T) {
 
 	// (c2) Read-only juga ditolak untuk case aborted (§10).
 	ro := cli.call(4, "tools/call", map[string]any{
-		"name":     "list_history",
+		"name":     "security.list_history",
 		"arguments": map[string]any{"case": caseID},
 	}, 15*time.Second)
 	if !strings.Contains(callText(t, ro), `"status":"denied"`) {
@@ -477,7 +477,7 @@ func TestKillSwitchMidExecutionE2E(t *testing.T) {
 
 	// Tanpa case: read-only tetap melayani (event store utuh, bukti tidak hilang).
 	roAll := cli.call(5, "tools/call", map[string]any{
-		"name":     "list_history",
+		"name":     "security.list_history",
 		"arguments": map[string]any{},
 	}, 15*time.Second)
 	allText := callText(t, roAll)

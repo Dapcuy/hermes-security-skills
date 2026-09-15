@@ -125,4 +125,4 @@ risk: medium
 - `injection-validation` — validasi indikasi injection yang muncul dari iterasi.
 - `vulnerability-validation` — kerangka validasi umum dan status lifecycle.
 - `false-positive-analysis` — penyisiran observation mencurigakan.
-- `http-proxy-request-replay` — skill domain operasi replay lanjutan.
+- `http-request-replay` — skill domain operasi replay lanjutan.

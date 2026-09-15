@@ -44,7 +44,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — membaca riwayat request/response yang terekam pada event store (read-only).
+
 
 Skill ini tidak meminta capability aktif lain. Penarikan data baru lewat replay bukan bagian dari skill ini — ia hanya membaca apa yang sudah terekam, lalu mengolahnya menjadi evidence berkaidah.
 

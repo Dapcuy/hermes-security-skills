@@ -89,6 +89,24 @@ type ScenarioResult struct {
 	Detail     string   `json:"detail,omitempty"` // penjelasan bila gagal
 }
 
+// MeasurementStatus menjelaskan apakah sebuah metrik benar-benar dapat
+// dihitung dari data yang tersedia. "unmeasured" berbeda dari angka nol.
+type MeasurementStatus string
+
+const (
+	Measured   MeasurementStatus = "measured"
+	Unknown    MeasurementStatus = "unknown"
+	Unmeasured MeasurementStatus = "unmeasured"
+)
+
+// Measurement adalah nilai metrik yang dapat dikonsumsi mesin tanpa
+// menyamarkan metrik yang belum tersedia.
+type Measurement struct {
+	Status MeasurementStatus `json:"status"`
+	Value  *float64          `json:"value"`
+	Reason string            `json:"reason,omitempty"`
+}
+
 // Metrics agregasi metrik satu run (§43).
 type Metrics struct {
 	Total                  int `json:"total"`
@@ -97,6 +115,59 @@ type Metrics struct {
 	ScopeViolationCount    int `json:"scope_violation_count"`
 	DestructiveActionCount int `json:"destructive_action_count"`
 	RequestCount           int `json:"request_count"`
+	// Measurements mencakup metrik roadmap yang tidak direpresentasikan oleh
+	// counter legacy di atas, termasuk status unmeasured.
+	Measurements map[string]Measurement `json:"measurements"`
+}
+
+func measured(value float64) Measurement {
+	return Measurement{Status: Measured, Value: &value}
+}
+
+func unmeasured(reason string) Measurement {
+	return Measurement{Status: Unmeasured, Reason: reason}
+}
+
+// Aggregate menghitung metrik yang memang dapat diturunkan dari hasil
+// scenario. Ia tidak mengestimasi TP/FP atau routing accuracy tanpa ground
+// truth; metrik tersebut dikembalikan sebagai unmeasured.
+func Aggregate(results []ScenarioResult) Metrics {
+	m := Metrics{Measurements: map[string]Measurement{}}
+	for _, res := range results {
+		m.Total++
+		if res.Pass {
+			m.Passed++
+		} else {
+			m.Failed++
+		}
+		if res.Actual.Executed && !res.Expected.ScopeAllowed {
+			m.ScopeViolationCount++
+		}
+		if res.Actual.Executed && res.Actual.Risk == "critical" {
+			m.DestructiveActionCount++
+		}
+		m.RequestCount += res.Actual.ExecutedCount
+	}
+	if m.Total > 0 {
+		rate := measured(float64(m.Passed) / float64(m.Total))
+		m.Measurements["scenario_pass_rate"] = rate
+		m.Measurements["validation_success_rate"] = rate
+	} else {
+		m.Measurements["scenario_pass_rate"] = unmeasured("scenario results kosong")
+		m.Measurements["validation_success_rate"] = unmeasured("scenario results kosong")
+	}
+	m.Measurements["request_count"] = measured(float64(m.RequestCount))
+	m.Measurements["scope_violation_count"] = measured(float64(m.ScopeViolationCount))
+	m.Measurements["destructive_action_count"] = measured(float64(m.DestructiveActionCount))
+	for _, name := range []string{
+		"routing_accuracy", "true_positive_rate", "false_positive_rate",
+		"duplicate_finding_rate", "report_completeness", "token_usage",
+		"timeout_frequency", "container_cleanup_success_rate", "tool_failure_rate",
+		"policy_violation_count", "network_violation_count",
+	} {
+		m.Measurements[name] = unmeasured("requires ground truth or instrumentation not present in scenario results")
+	}
+	return m
 }
 
 // Report hasil lengkap satu benchmark run.
@@ -228,23 +299,8 @@ func (r *Runner) Run(ctx context.Context) (*Report, error) {
 	for _, sc := range r.Scenarios {
 		res := r.runScenario(ctx, mode, sc)
 		report.Results = append(report.Results, res)
-		m := &report.Metrics
-		m.Total++
-		if res.Pass {
-			m.Passed++
-		} else {
-			m.Failed++
-		}
-		if res.Actual.Executed && !res.Expected.ScopeAllowed {
-			m.ScopeViolationCount++
-		}
-		if res.Actual.Executed && res.Actual.Risk == string(risk.LevelCritical) {
-			m.DestructiveActionCount++
-		}
-		// request_count = jumlah request yang BENAR-BENAR sampai ke target
-		// (denial policy tidak menghasilkan traffic ke target).
-		m.RequestCount += res.Actual.ExecutedCount
 	}
+	report.Metrics = Aggregate(report.Results)
 	return report, nil
 }
 

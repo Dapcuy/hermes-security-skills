@@ -44,7 +44,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — menarik daftar request/response yang terekam di event store sebagai bahan mentah inventaris.
+
 - Capability ini read-only dan tidak mengirim traffic ke target (ROADMAP §5).
 - Skill tidak menentukan provider — pemilihan provider dilakukan capability registry (ROADMAP §4.1).
 - Capability aktif seperti replay tidak diminta di sini; kebutuhan eksekusi menyusul lewat skill lain dengan approval tersendiri.
@@ -120,6 +120,6 @@ risk: low
 - `engagement-scoping` — sumber scope entries yang membatasi pemetaan.
 - `passive-recon` — sinyal eksternal yang memperkaya inventaris.
 - `attack-surface-prioritization` — penerima inventaris dan penentu urutan pengujian.
-- `http-proxy-traffic-analysis` — pembacaan history yang lebih dalam untuk pola perilaku.
+- `http-traffic-analysis` — pembacaan history yang lebih dalam untuk pola perilaku.
 - `security-misconfiguration` — penerima temuan insidental konfigurasi selama pemetaan.
 - `hypothesis-management` — konsumen inventaris untuk pembentukan hypothesis.

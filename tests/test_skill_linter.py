@@ -174,7 +174,7 @@ class InlineRuleTest(unittest.TestCase):
             make_skill_text(
                 sections=list(lint.REQUIRED_SECTIONS) + ["Required Credentials"],
                 extra_frontmatter="requires_credentials: true\n",
-                capabilities_body="- `list_history` — baca riwayat event store.",
+                capabilities_body="- `inspect_request` — baca detail request.",
             )
         )
         self.assertEqual(self.rules(violations) & {"missing-section", "frontmatter"}, set())
@@ -225,6 +225,12 @@ class InlineRuleTest(unittest.TestCase):
         self.assertIn("unknown-capability", self.rules(violations))
         messages = " ".join(v.message for v in violations)
         self.assertIn("free_port_scan", messages)
+
+    def test_list_history_is_control_tool_not_capability(self):
+        violations = self.lint_text(
+            make_skill_text(capabilities_body="- `list_history` — baca riwayat event store.")
+        )
+        self.assertIn("unknown-capability", self.rules(violations))
 
     def test_allowed_capabilities_not_flagged(self):
         body = "\n".join(f"- `{cap}` — capability resmi." for cap in lint.ALLOWED_CAPABILITIES)

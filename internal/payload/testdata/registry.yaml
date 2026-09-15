@@ -1,0 +1,10 @@
+version: 1
+payloads:
+  - id: sql-basic
+    category: sql-injection
+    context: query
+    risk: low
+    destructive: false
+    max_attempts: 2
+    source: curated
+    payload: "' OR '1'='1"

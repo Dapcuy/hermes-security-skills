@@ -21,7 +21,7 @@ risk: low
 
 - Deployment target atau lab memakai MCP server dan perlu dinilai konfigurasi keamanannya.
 - Review arsitektur agent yang mengikat tool eksternal dan perlu dipastikan jalur policy-nya benar.
-- Mendampingi llm-security bila agensi model dieksekusi lewat tool MCP.
+- Mendampingi llm-api-security bila agensi model dieksekusi lewat tool MCP.
 - Audit sebelum deployment: apakah prasyarat ROADMAP §4.4 (restricted tool access) terpenuhi.
 
 ## When Not To Use
@@ -124,7 +124,7 @@ Tidak ada capability aktif yang diperlukan. Review berbasis file konfigurasi dan
 
 ## Related Skills
 
-- `llm-security` — konteks agen yang memakai tool MCP.
+- `llm-api-security` — konteks agen yang memakai tool MCP.
 - `skill-supply-chain-review` — menilai asal-usul server/tool pihak ketiga sebelum di-allowlist.
 - `dependency-security` — menilai dependensi dari server MCP itu sendiri.
 - `evidence-handling` — mencatat temuan konfigurasi dan status pin sebagai evidence berkaidah.

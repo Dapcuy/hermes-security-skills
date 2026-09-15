@@ -1,0 +1,74 @@
+services:
+  hermes-prometheus:
+    image: prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.listen-address=0.0.0.0:9090
+    expose: ["9090"]
+    volumes:
+      - type: bind
+        source: ${HERMES_PROMETHEUS_CONFIG:?HERMES_PROMETHEUS_CONFIG is required}
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+      - type: bind
+        source: ${HERMES_ALERT_RULES:?HERMES_ALERT_RULES is required}
+        target: /etc/prometheus/hermes-alerts.yml
+        read_only: true
+      - hermes-prometheus-data:/prometheus
+    networks:
+      - hermes-control
+
+  hermes-alertmanager:
+    image: prom/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=0.0.0.0:9093
+    expose: ["9093"]
+    volumes:
+      - type: bind
+        source: ${HERMES_ALERTMANAGER_CONFIG:?HERMES_ALERTMANAGER_CONFIG is required}
+        target: /etc/alertmanager/alertmanager.yml
+        read_only: true
+      - hermes-alertmanager-data:/alertmanager
+    networks:
+      - hermes-control
+
+networks:
+  hermes-control:
+    external: true
+    name: hermes-control
+
+volumes:
+  hermes-prometheus-data:
+    name: hermes-prometheus-data
+  hermes-alertmanager-data:
+    name: hermes-alertmanager-data

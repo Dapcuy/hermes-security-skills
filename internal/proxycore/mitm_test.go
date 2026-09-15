@@ -270,6 +270,34 @@ func TestMITMScopeDeniedInTunnel(t *testing.T) {
 	}
 }
 
+// TestMITMProxyCloseReleasesEphemeralMaterial: shutdown menghapus CA dan
+// leaf private key dari state in-memory, lalu menolak pembuatan leaf baru.
+func TestMITMProxyCloseReleasesEphemeralMaterial(t *testing.T) {
+	ca, err := GenerateCA(time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
+	eng, err := NewEngine(&Bundle{Version: 1, AllowedHosts: []string{"localhost:443"}, MaxRequests: 1, RateLimitRPS: 1}, Options{EvidenceDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	m := NewMITMProxy(ca, eng)
+	if _, err := m.leafFor("host-a.example.com"); err != nil {
+		t.Fatalf("leafFor: %v", err)
+	}
+
+	m.Close()
+	if ca.Key != nil || ca.Cert != nil || ca.DER != nil {
+		t.Fatal("Close harus melepaskan material CA ephemeral")
+	}
+	if len(m.leaves) != 0 {
+		t.Fatalf("Close menyisakan %d leaf certificate", len(m.leaves))
+	}
+	if _, err := m.leafFor("host-a.example.com"); err == nil {
+		t.Fatal("leafFor setelah Close harus gagal")
+	}
+}
+
 // TestMITMLeafPerSNI: leaf certificate di-generate dinamis per hostname dan
 // di-cache (dua request ke host yang sama memakai leaf yang sama).
 func TestMITMLeafPerSNI(t *testing.T) {

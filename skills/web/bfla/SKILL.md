@@ -44,7 +44,7 @@ requires_credentials: true
 
 ## Required Capabilities
 
-- `list_history` — mengumpulkan baseline pemanggilan fungsi oleh peran tinggi dari traffic terekam.
+
 - `request_replay` — memanggil ulang fungsi dengan identitas peran rendah di dalam approval.
 - `response_comparison` — membandingkan respons admin versus peran rendah atas fungsi yang sama.
 

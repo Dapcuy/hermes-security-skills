@@ -1,13 +1,12 @@
 # Image release pipeline (ROADMAP §37):
-#   Source → CI → Build → Scan (Trivy) → SBOM (syft) → Sign (cosign keyless)
+#   Source → CI → Build → Scan (Trivy gate) → SBOM (syft) → Sign (cosign keyless)
 #   → Publish GHCR.
 #
-# Trigger: tag v* (release). Matrix: 6 image sesuai image-manifest.yaml —
+# Trigger: tag v* (release). Matrix: 10 image sesuai release matrix —
 # build context = ROOT repo (Dockerfile COPY path relatif root).
 #
-# Permissions:
-#   packages: write  → push ke GHCR
-#   id-token: write  → cosign keyless signing (OIDC/Fulcio)
+# Permissions default read-only. Write permissions hanya diberikan pada job
+# publish/sign di bawah.
 name: images
 
 on:
@@ -17,8 +16,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -26,6 +23,10 @@ env:
 jobs:
   build-scan-publish-sign:
     name: ${{ matrix.image }} — build / scan / SBOM / sign / publish
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -49,33 +50,51 @@ jobs:
           - name: tool-nuclei
             image: hermes-tool-nuclei
             dockerfile: runtimes/docker/images/tool-nuclei/Dockerfile
+          - name: tool-subfinder
+            image: hermes-tool-subfinder
+            dockerfile: runtimes/docker/images/tool-subfinder/Dockerfile
+          - name: tool-httpx
+            image: hermes-tool-httpx
+            dockerfile: runtimes/docker/images/tool-httpx/Dockerfile
+          - name: tool-nmap
+            image: hermes-tool-nmap
+            dockerfile: runtimes/docker/images/tool-nmap/Dockerfile
+          - name: tool-ffuf
+            image: hermes-tool-ffuf
+            dockerfile: runtimes/docker/images/tool-ffuf/Dockerfile
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Hitung owner-lowercase dan version dari tag
         id: meta
+        shell: bash
         run: |
-          echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          printf 'owner_lc=%s\nversion=%s\n' "$owner" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Dockerfile base-image pinning
+        run: python tools/docker-linter/check.py runtimes/docker/images
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
       - name: Login ke GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # §37 urutan: Build → Scan SEBELUM publish. Image dibangun lokal
-      # (load: true), discan, baru di-push bila build selesai. Hasil scan
-      # HIGH/CRITICAL TIDAK menggagalkan build (exit-code: 0) tetapi
-      # SARIF di-upload sebagai artifact untuk ditinjau.
+      # (load: true), discan, baru di-push bila build selesai. HIGH/CRITICAL
+      # menggagalkan release; SARIF tetap di-upload sebagai artifact.
       - name: Build image (lokal, untuk scan)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -84,56 +103,149 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan Trivy (HIGH, CRITICAL — exit 0, hasil tetap di-upload)
-        uses: aquasecurity/trivy-action@0.28.0
+      # Release gate: HIGH/CRITICAL yang tidak ter-fix menggagalkan publish.
+      - name: Scan Trivy (HIGH, CRITICAL — release gate)
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2
         with:
           image-ref: hermes-local/${{ matrix.image }}:ci
           severity: HIGH,CRITICAL
-          exit-code: "0"
+          exit-code: "1"
           format: sarif
           output: trivy-${{ matrix.image }}.sarif
           ignore-unfixed: true
 
       - name: Upload hasil scan Trivy
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: trivy-${{ matrix.image }}
           path: trivy-${{ matrix.image }}.sarif
           if-no-files-found: error
 
-      # Publish ke GHCR dengan tag versi (dari tag git, tanpa 'v') + tag sha.
-      # Digest dari step ini dipakai untuk signing (image ref immutable).
-      - name: Push ke GHCR
+      # Publish image yang SAMA dengan image yang sudah di-load dan discan.
+      # Tidak ada rebuild setelah Trivy: tag/push hanya memindahkan image ID
+      # yang sama ke GHCR. Digest registry dipakai untuk signing dan metadata.
+      - name: Tag and push scanned image ke GHCR
         id: push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}
-            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}:sha-${{ github.sha }}
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          image="${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}"
+          local_image="hermes-local/${{ matrix.image }}:ci"
+          version_ref="$image:$RELEASE_VERSION"
+          sha_ref="$image:sha-${GITHUB_SHA}"
+          docker tag "$local_image" "$version_ref"
+          docker tag "$local_image" "$sha_ref"
+          docker push "$version_ref"
+          docker push "$sha_ref"
+          repo_digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$version_ref")"
+          digest="${repo_digest##*@}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate SBOM (syft, SPDX JSON)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
         with:
-          image: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}
+          image: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
           format: spdx-json
           artifact-name: sbom-${{ matrix.image }}.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.spdx.json
+          if-no-files-found: error
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac
 
       # Keyless signing via OIDC (id-token: write). Sign terhadap DIGEST,
       # bukan tag — tag bisa bergerak, digest tidak (§14).
       - name: Sign image (cosign keyless, by digest)
-        run: >
-          cosign sign --yes
-          ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$IMAGE_REF"
 
       - name: Verify signature (sanity check)
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
+          COSIGN_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/images.yml@refs/tags/${{ github.ref_name }}
         run: >
-          cosign verify
-          ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
-          --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/'
+          cosign verify "$IMAGE_REF"
+          --certificate-identity "$COSIGN_IDENTITY"
           --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      - name: Write release bundle metadata
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          COSIGN_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/images.yml@refs/tags/${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          image="${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lc }}/${{ matrix.image }}"
+          printf '{"image":"%s","digest":"%s","sbom":"sbom-%s.spdx.json","cosign_oidc_issuer":"https://token.actions.githubusercontent.com","cosign_certificate_identity":"%s","repository":"%s","commit":"%s","version":"%s"}\n' \
+            "$image" "${{ steps.push.outputs.digest }}" "${{ matrix.image }}" "$COSIGN_IDENTITY" "${{ github.repository }}" "${{ github.sha }}" "$RELEASE_VERSION" \
+            > "release-${{ matrix.image }}.json"
+
+      - name: Upload release bundle metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-${{ matrix.image }}
+          path: release-${{ matrix.image }}.json
+          if-no-files-found: error
+
+  aggregate-release-bundle:
+    name: aggregate and validate immutable release bundle
+    needs: build-scan-publish-sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download per-image metadata
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: release-*
+          path: release-artifacts
+          merge-multiple: false
+
+      - name: Download SBOM metadata
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: sbom-*
+          path: sbom-artifacts
+          merge-multiple: false
+
+      - name: Build aggregate release-bundle.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-artifacts/release-*/*.json)
+          test "${#files[@]}" -eq 10
+          jq -s \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg version "${GITHUB_REF_NAME#v}" \
+            '{version:$version, repository:$repository, commit:$commit, images:.}' \
+            "${files[@]}" > release-bundle.json
+          test "$(jq '.images | length' release-bundle.json)" -eq 10
+          expected='["hermes-proxy","hermes-tool-ffuf","hermes-tool-httpx","hermes-tool-nmap","hermes-tool-nuclei","hermes-tool-subfinder","hermes-validator-http","hermes-validator-json","hermes-validator-openapi","hermes-validator-python"]'
+          actual=$(jq -c '[.images[].image | split("/") | last] | sort' release-bundle.json)
+          test "$actual" = "$expected"
+          complete=$(jq '[.images[] | select((.digest | test("^sha256:[0-9a-f]{64}$")) and .sbom and .cosign_oidc_issuer and .cosign_certificate_identity)] | length' release-bundle.json)
+          test "$complete" -eq 10
+          consistent=$(jq --arg repository "$GITHUB_REPOSITORY" --arg commit "$GITHUB_SHA" --arg version "${GITHUB_REF_NAME#v}" '[.images[] | select(.repository != $repository or .commit != $commit or .version != $version)] | length' release-bundle.json)
+          test "$consistent" -eq 0
+          shopt -s nullglob
+          sboms=(sbom-artifacts/sbom-*/*.spdx.json)
+          test "${#sboms[@]}" -eq 10
+
+      - name: Upload aggregate release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-bundle
+          path: release-bundle.json
+          if-no-files-found: error

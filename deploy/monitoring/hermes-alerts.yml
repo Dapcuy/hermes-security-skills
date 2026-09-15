@@ -1,0 +1,29 @@
+groups:
+  - name: hermes-proxy
+    rules:
+      - alert: HermesProxyDown
+        expr: up{job="hermes-proxy"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Hermes proxy is not scrapeable
+          description: The internal proxy metrics endpoint has been unavailable for 2 minutes.
+
+      - alert: HermesProxyErrors
+        expr: rate(hermes_proxy_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Hermes proxy execution errors elevated
+          description: Proxy execution errors exceed 0.1 per second for 5 minutes.
+
+      - alert: HermesProxyLatencyHigh
+        expr: histogram_quantile(0.95, rate(hermes_proxy_request_duration_ms_bucket[5m])) > 2000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Hermes proxy request latency elevated
+          description: The estimated p95 request latency exceeds 2 seconds.

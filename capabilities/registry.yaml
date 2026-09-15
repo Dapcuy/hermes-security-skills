@@ -1,15 +1,25 @@
-# Capability registry — Hermes Security Skills
-# Sumber kebenaran untuk capability abstraction (ROADMAP 5).
-# Skill meminta capability, BUKAN tool; provider ditentukan di sini (ROADMAP 4.1).
+# Capability registry — Hermes Security Skills (ROADMAP v3.0 §12)
+# Sumber kebenaran untuk capability abstraction (ROADMAP §4/§12).
+# Skill meminta capability, BUKAN tool; provider ditentukan di sini.
 #
-# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP 4.3, 4.4).
+# File ini READ-ONLY dari sudut pandang Hermes (ROADMAP §7).
 # Format: YAML subset sederhana (map / seq / string / int / bool) —
 # tanpa anchor, tanpa multiline-flow, tanpa fitur kompleks.
 # Lihat capabilities/schemas/README.md untuk field yang valid.
+#
+# CATATAN v3.0 (§12):
+#   - Capability TIDAK lagi memetakan tool pihak ketiga satu-per-satu.
+#     Mapping capability -> tool (image, versi, digest, risk, approval per
+#     tool) pindah ke Tool Registry: tools/registry.yaml (ROADMAP §36).
+#     Contoh: endpoint_discovery lewat nmap mewajibkan approval "always"
+#     — keputusan itu ada di Tool Registry, bukan di sini.
+#   - list_history bukan capability: ia operasi read-only internal control
+#     plane (event store) dan diekspos langsung sebagai MCP tool
+#     security.list_history.
 
-version: 1
+version: 3
 
-# Fallback semantics (ROADMAP 5.1) — fail-closed:
+# Fallback semantics (ROADMAP §5.1 / §12) — fail-closed:
 #   1. Provider utama UNAVAILABLE = capability GAGAL dengan error
 #      eksplisit. TIDAK ada silent degrade, TIDAK ada fallback otomatis.
 #   2. Policy denial = stop, bukan fallback.
@@ -34,23 +44,42 @@ capabilities:
     requires_network: true
     requires_approval: conditional
 
-  response_comparison:
-    risk: low
+  # Mutasi request terkendali (safe mutation) via hermes-proxy —
+  # satu-satunya jalur egress (ROADMAP §25).
+  request_mutation:
+    risk: medium
     default_provider: proxy
     requires_scope: true
-    requires_network: false
+    requires_network: true
+    requires_approval: conditional
 
-  list_history:
-    risk: low
-    default_provider: proxy
-    requires_scope: false
-    requires_network: false
-
-  json_diff:
+  # Perbandingan dua exchange yang SUDAH terekam (evidence) — murni
+  # komputasi lokal di control plane, tanpa traffic ke target.
+  response_comparison:
     risk: low
     default_provider: local
     requires_scope: false
     requires_network: false
+
+  # Controlled discovery permukaan. Mapping ke tool pihak ketiga
+  # (subfinder / httpx / ffuf / nmap) via Tool Registry (ROADMAP §36):
+  # tools/registry.yaml — risk, approval requirement, image, digest,
+  # dan network requirement spesifik per tool ditentukan DI SANA,
+  # bukan di capability ini (mis. nmap = approval "always").
+  endpoint_discovery:
+    risk: medium
+    default_provider: tool
+    requires_scope: true
+    requires_network: true
+
+  # Validation berbasis template. Mapping ke Tool Registry:
+  # nuclei + templates ter-pin (templates_version di Tool Registry;
+  # runtime tidak pernah auto-update template, ROADMAP §41).
+  template_based_validation:
+    risk: medium
+    default_provider: tool
+    requires_scope: true
+    requires_network: true
 
   openapi_analysis:
     risk: low
@@ -59,52 +88,8 @@ capabilities:
     requires_network: false
     image: hermes-validator-openapi
 
-  # --- Capability tool pihak ketiga (ROADMAP §13.1) ---
-  # Satu tool = satu image terkurasi (hermes-tool-*), di-build dan di-sign
-  # saat CI, tanpa install saat runtime. Wrapper di dalam image menegakkan
-  # policy bundle, budget, dan rate limit dari execution plan, lalu
-  # mengubah output tool menjadi validation-result.json + evidence dengan
-  # provenance. requires_network: true menandai image yang butuh egress
-  # terkendali — ke data source pihak ketiga (passive recon) atau ke
-  # target yang sudah lolos scope validation — dan hanya aktif setelah
-  # jalur egress tersedia (post-MVP, ROADMAP §5.2).
-
-  # Enumerasi subdomain pasif: egress hanya ke third-party data sources
-  # (sifat passive recon — tidak ada request ke target); domain target
-  # wajib in-scope.
-  subfinder_enum:
+  json_diff:
     risk: low
-    default_provider: docker
-    requires_scope: true
-    requires_network: true
-    image: hermes-tool-subfinder
-
-  # HTTP probing atas daftar URL in-scope: status, title, indikasi
-  # teknologi per URL.
-  httpx_probe:
-    risk: low
-    default_provider: docker
-    requires_scope: true
-    requires_network: true
-    image: hermes-tool-httpx
-
-  # Port scanning aktif = risk HIGH: approval eksplisit SELALU wajib
-  # (policy/risk.yaml high -> approval_required, tidak pernah automatic);
-  # metode dan port range dibatasi execution plan (ROADMAP §8, §13.1, §14).
-  nmap_scan:
-    risk: high
-    default_provider: docker
-    requires_scope: true
-    requires_network: true
-    requires_approval: always
-    image: hermes-tool-nmap
-
-  # Directory fuzzing terkendali: wordlist ter-bake di image, budget dan
-  # rate limit dipaksa wrapper; approval conditional sesuai risk medium.
-  ffuf_fuzz:
-    risk: medium
-    default_provider: docker
-    requires_scope: true
-    requires_network: true
-    requires_approval: conditional
-    image: hermes-tool-ffuf
+    default_provider: local
+    requires_scope: false
+    requires_network: false

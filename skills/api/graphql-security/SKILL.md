@@ -125,5 +125,5 @@ Skill tidak menentukan provider; replay aktif hanya berjalan melalui provider pr
 - `rest-api-testing` — sisi REST dari API yang sama.
 - `idor-and-bola` — rute temuan akses lintas akun pada resolver.
 - `api-security-methodology` — konteks prioritas permukaan API.
-- `http-proxy-traffic-analysis` — sumber baseline query dari history.
+- `http-traffic-analysis` — sumber baseline query dari history.
 - `vulnerability-validation`, `false-positive-analysis` — kontrak validasi dan triase.

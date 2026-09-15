@@ -44,7 +44,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — membaca riwayat interaksi yang sudah terekam di event store untuk mencari pola proteksi.
+
 - `inspect_request` — memeriksa detail request/response terekam: headers, status, dan body ringkas.
 - Keduanya read-only dan tidak mengirim traffic ke target; presence cukup dinilai dari data yang sudah ada.
 - Fingerprinting aktif tidak diminta di sini — bila benar-benar perlu, ia menjadi rekomendasi yang dieksekusi skill validasi dengan approvalnya sendiri.

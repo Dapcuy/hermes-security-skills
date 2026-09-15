@@ -2,7 +2,7 @@
 
 Threat model wajib sesuai `ROADMAP.md` §31 (Phase 0 — Definition). Setiap threat menjelaskan: deskripsi, vektor serangan, mitigasi yang sudah ditetapkan roadmap, dan residual risk — risiko yang tetap ada setelah mitigasi, agar pembaca tidak salah paham bahwa mitigasi = imunitas.
 
-Model mitigasi mengacu pada: `docs/security-model.md`, `docs/adr/` (ADR-001 s.d. ADR-010), `RULES.md`, dan `ROADMAP.md` (rujukan § dicantumkan per item).
+Model mitigasi mengacu pada: `docs/security-model.md`, `docs/adr/` (ADR-001 s.d. ADR-012), `RULES.md`, dan `ROADMAP.md` (rujukan § dicantumkan per item).
 
 > Catatan fase: mitigasi yang bersifat enforcement (di tool path) baru aktif pada **Phase 4+**. Sebelum itu semua guardrail advisory dan sistem tidak boleh dipakai terhadap target nyata (§4.2, ADR-007).
 
@@ -22,7 +22,7 @@ Model mitigasi mengacu pada: `docs/security-model.md`, `docs/adr/` (ADR-001 s.d.
 - Structural separation: output provider dibungkus delimiter + metadata (source, origin, trust level); blok diperlakukan sebagai quoted data.
 - Content quarantine: konten target hanya masuk reasoning melalui provider yang dinormalisasi — tidak ada raw dump response ke konteks.
 - Context budget: body besar di-truncate/summarize; full body hanya evidence reference (hash + path).
-- Knowledge firewall: konten target tidak bisa menulis ke knowledge/canonical, hanya memory/cases dengan trust "untrusted" (§24, §27).
+- Knowledge firewall: knowledge base adalah curated reference — konten target tidak bisa masuk ke direktori mana pun di dalamnya; ingest menolak fail-closed entry target-controlled, konten target hidup di evidence (§20, §23).
 - Policy firewall: tidak ada jalur konten target ke policy/, capabilities/, runtimes/ (§24).
 - Injection detection: pola instruksi imperatif ditandai; flag masuk evidence, bukan trigger eksekusi (§24).
 - Adversarial test suite wajib sejak Phase 4 (kasus di atas + canary injection di lab Phase 11), metrik `prompt injection success = 0` (§24, §42).
@@ -151,6 +151,26 @@ Model mitigasi mengacu pada: `docs/security-model.md`, `docs/adr/` (ADR-001 s.d.
 
 ---
 
+## Threat 8 — Knowledge Poisoning via Target Content
+
+**Deskripsi.** Sejak v3.0 project memakai Knowledge Base curated sebagai reference lintas engagement (ROADMAP §23). Jika konten target bisa "menulis" pelajaran ke knowledge base — misalnya melalui entry yang provenance-nya dipalsukan, atau reasoning yang menyalin klaim target tanpa validasi — penyerang memperoleh persistence lintas engagement: pola jahat, URL jebakan, atau kesimpulan palsu ("endpoint X aman") akan diwariskan ke engagement berikutnya sebagai knowledge yang dipercaya.
+
+**Vektor.**
+- Response target berisi instruksi/teks yang mendorong reasoning menyimpan "pelajaran" ke knowledge.
+- File entry hasil craft dengan `provenance.source: target-controlled` yang trust-nya dipalsukan `trusted`, lalu di-ingest ulang lewat jalur manusia.
+- Entry untrusted yang diletakkan manual di direktori knowledge lalu dipromosikan lewat `knowledge review`.
+
+**Mitigasi (roadmap).**
+- Knowledge base tidak menerima konten target melalui jalur apapun: `knowledge ingest` menolak fail-closed entry dengan provenance `target-controlled` atau trust `untrusted`; konten target hidup di evidence (§20, §23).
+- Cap `target-controlled` adalah cap sistem: file yang membawanya ditolak walau trust dipalsukan `trusted` — review manusia yang sah menulis ulang sumbernya (diverifikasi unit test).
+- Ingest hanya menghasilkan state pra-review (`proposed`) di `knowledge/research/` — tidak ada jalur langsung ke `reviewed`/`canonical`; promosi ke canonical adalah keputusan owner.
+- `knowledge review` menolak fail-closed promosi entry untrusted ke `reviewed`/`trusted` (lapisan kedua untuk file yang diletakkan manual).
+- Entry dengan state `reviewed`/`trusted` hanya lahir dari human-in-the-loop; linter CI menjaga bentuk, human review menjaga substansi.
+
+**Residual risk.** Firewall memblokir jalur mekanis; ia tidak bisa menilai apakah entry berprovenance manusia benar-benar benar — kurasi yang ceroboh (menyalin klaim target tanpa validasi ke entry berprovenance manual) tetap mungkin dan hanya tertangkap review. Kualitas kurasi adalah batas atas integritas knowledge base; benchmark mengukur dampaknya lewat metrik false positive dan `prompt injection success = 0` (§63).
+
+---
+
 ## Ringkasan
 
 | Threat | Mitigasi utama | Boundary yang menjaga |
@@ -162,5 +182,6 @@ Model mitigasi mengacu pada: `docs/security-model.md`, `docs/adr/` (ADR-001 s.d.
 | 5. Image registry | Digest + signature verify sebelum run; SBOM; build-from-source | Adapter menolak image tak terverifikasi |
 | 6. Control plane (TCB) | Review ketat, policy firewall, deployment prerequisites, audit append-only | TCB — tanpa lapisan di bawahnya |
 | 7. Kebocoran kredensial | Reference-only, injection saat eksekusi, sanitasi sebelum persist | Kredensial tidak pernah menyentuh konteks |
+| 8. Knowledge poisoning | Knowledge firewall: ingest menolak target-controlled; state reviewed/trusted hanya via human review | Target content tidak pernah menulis knowledge base |
 
 Threat model ini hidup: setiap perubahan arsitektur (ADR baru/revisi) wajib dievaluasi ulang terhadap daftar ini, dan benchmark Phase 11 mengukur metrik yang menyingkap pelanggaran (scope violation, policy bypass, prompt injection success, container escape — semuanya target = 0, §42).

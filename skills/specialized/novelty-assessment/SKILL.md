@@ -48,7 +48,7 @@ risk: low
 
 ## Required Capabilities
 
-- `list_history` — opsional, read-only: membaca evidence dan riwayat kasus terkait dari event store saat penilaian membutuhkan konteks engagement (ROADMAP §5.1, §11). Tanpa capability ini, penilaian tetap bisa berjalan atas finding dan knowledge base yang diserahkan.
+
 
 ## Core Concepts
 

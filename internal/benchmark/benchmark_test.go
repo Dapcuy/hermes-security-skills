@@ -71,6 +71,42 @@ func baseScenarios() []Scenario {
 	}
 }
 
+func TestAggregateMetricsPreserveMeasuredAndUnmeasured(t *testing.T) {
+	results := []ScenarioResult{
+		{Pass: true, Expected: Expected{ScopeAllowed: true}, Actual: Actual{Executed: true, ExecutedCount: 2, Risk: "low"}},
+		{Pass: false, Expected: Expected{ScopeAllowed: false}, Actual: Actual{Executed: true, ExecutedCount: 1, Risk: "critical"}},
+		{Pass: true, Expected: Expected{ScopeAllowed: false}, Actual: Actual{Executed: false, ExecutedCount: 0, Risk: "low"}},
+	}
+	m := Aggregate(results)
+	if m.Total != 3 || m.Passed != 2 || m.Failed != 1 || m.RequestCount != 3 {
+		t.Fatalf("counter aggregation salah: %+v", m)
+	}
+	if m.ScopeViolationCount != 1 || m.DestructiveActionCount != 1 {
+		t.Fatalf("security counters salah: %+v", m)
+	}
+	passRate := m.Measurements["scenario_pass_rate"]
+	if passRate.Status != Measured || passRate.Value == nil || *passRate.Value != 2.0/3.0 {
+		t.Fatalf("pass rate tidak terukur dengan benar: %+v", passRate)
+	}
+	validationRate := m.Measurements["validation_success_rate"]
+	if validationRate.Status != Measured || validationRate.Value == nil || *validationRate.Value != 2.0/3.0 {
+		t.Fatalf("validation success rate tidak terukur dengan benar: %+v", validationRate)
+	}
+	for _, name := range []string{"routing_accuracy", "true_positive_rate", "false_positive_rate", "duplicate_finding_rate", "report_completeness"} {
+		measurement := m.Measurements[name]
+		if measurement.Status != Unmeasured || measurement.Value != nil {
+			t.Errorf("%s harus explicit unmeasured: %+v", name, measurement)
+		}
+	}
+}
+
+func TestAggregateEmptyResultsIsExplicitlyUnmeasured(t *testing.T) {
+	m := Aggregate(nil)
+	if m.Total != 0 || m.Measurements["scenario_pass_rate"].Status != Unmeasured {
+		t.Fatalf("empty aggregation harus unmeasured: %+v", m)
+	}
+}
+
 // ---------------------------------------------------------------- load
 
 func TestLoadScenarios(t *testing.T) {

@@ -49,7 +49,7 @@ risk: medium
 ## Required Capabilities
 
 - `inspect_request` — memeriksa request terekam: parameter, header, dan format input yang mungkin terefleksi.
-- `list_history` — menemukan respons yang mengandung refleksi dan baseline per endpoint.
+
 - `request_replay` — mengirim request dengan canary marker unik, satu marker per iterasi.
 - `response_comparison` — menemukan posisi marker di respons dan membandingkan konteks antar iterasi.
 - Skill tidak menentukan provider; replay hanya berjalan di provider proxy (ROADMAP §4.1, §5.2).
@@ -134,7 +134,7 @@ risk: medium
 ## Related Skills
 
 - `web-surface-mapping` — inventaris parameter dan field yang berpotensi terefleksi.
-- `http-proxy-traffic-analysis` — sumber file JavaScript terekam untuk analisis statis DOM.
+- `http-traffic-analysis` — sumber file JavaScript terekam untuk analisis statis DOM.
 - `payload-selection` — payload bermetadata bila suatu saat eskalasi terkurasi diizinkan (ROADMAP §22).
 - `security-misconfiguration` — konfigurasi header keamanan seperti CSP.
 - `waf-analysis` — konteks proteksi yang memengaruhi interpretasi respons.

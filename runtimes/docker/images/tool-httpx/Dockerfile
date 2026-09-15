@@ -23,7 +23,7 @@
 # bersamaan. httpx v1.12.0 butuh Go >= 1.26 (go.mod) → image golang:1.26.
 # §14 — naikkan ke digest pinning saat publish: golang:1.26@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM golang:1.26 AS build
+FROM golang:1.26@sha256:3c3e25a4da13fd0478eed2df1eb35a0e667094a7124d3993a6a1d30f71c17e79 AS build
 # CGO_ENABLED=0 — httpx harus static binary: base runtime distroless STATIC
 # tidak punya dynamic loader (glibc), exec binary dinamis gagal
 # "no such file or directory" saat fork/exec.
@@ -47,7 +47,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 # §14 — digest pinning saat publish:
 #   FROM gcr.io/distroless/static-debian12:nonroot@sha256:<digest>
 # -----------------------------------------------------------------------------
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 COPY --from=build /go/bin/httpx /usr/bin/httpx
 COPY --from=build /out/wrapper /wrapper

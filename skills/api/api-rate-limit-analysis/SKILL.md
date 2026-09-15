@@ -124,7 +124,7 @@ risk: medium
 ## Related Skills
 
 - `api-security-methodology` — konteks prioritas endpoint.
-- `http-proxy-request-replay` — mekanisme replay yang dipakai lewat capability.
+- `http-request-replay` — mekanisme replay yang dipakai lewat capability.
 - `replay-and-duplicate-action-analysis` — pengulangan aksi stateful (fokus bisnis, bukan volume).
 - `jwt-and-token-analysis` — friksi pada endpoint refresh/OTP sering berpasangan.
 - `false-positive-analysis` — triase temuan abuse control.
