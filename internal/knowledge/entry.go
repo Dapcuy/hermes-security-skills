@@ -153,7 +153,8 @@ var validTrust = map[Trust]bool{
 // isTargetControlled melaporkan apakah entry membawa penanda konten target
 // (§20) — baik dari cap provenance.source maupun klaim trust untrusted.
 func (e *Entry) isTargetControlled() bool {
-	return e.Provenance.Source == SourceTargetControlled || e.Provenance.Trust == TrustUntrusted
+	return strings.EqualFold(strings.TrimSpace(e.Provenance.Source), SourceTargetControlled) ||
+		strings.EqualFold(strings.TrimSpace(string(e.Provenance.Trust)), string(TrustUntrusted))
 }
 
 // validate memeriksa kelengkapan & keabsahan field entry (fail-closed).

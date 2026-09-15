@@ -50,7 +50,7 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 
 ## Core Concepts
 
-- **core/** (Tier 1): fondasi setiap engagement — scoping, routing, hypothesis, validation, false-positive analysis, evidence, dan reporting.
+- **core/** (Tier 1): fondasi setiap engagement — scoping, routing, hypothesis, validation, false-positive analysis, evidence, reporting, dan lookup reference knowledge reviewed.
 - **http/** (Tier 2): metodologi operasi HTTP melalui capability proxy — traffic analysis, replay, mutation, comparison, analisis auth flow, analisis header keamanan, analisis redirect, dan analisis capture traffic browser (supporting).
 - **web/** (Tier 3): analisis keamanan aplikasi web per kelas kerentanan — authorization, IDOR/BOLA, BFLA, XSS, CSRF, SSRF, injection, CORS, keamanan file upload, misconfiguration, plus skill pendukung payload dan fuzzing.
 - **api/** (Tier 4): metodologi keamanan API — methodology, OpenAPI, REST, GraphQL, token/JWT, OAuth/OIDC, rate limit, dan webhook/callback.
@@ -123,7 +123,7 @@ Tidak ada capability aktif yang diperlukan. Halaman ini adalah dokumentasi navig
 | `source/` | pendukung | Review source code yang sepenuhnya pasif: review authorization, data flow server-side, deteksi secret. | 3 |
 | `specialized/` | 6 | Domain khusus yang ditambahkan sesuai kebutuhan nyata: triage source code, risiko dependensi, keamanan integrasi LLM API, keamanan MCP, review supply chain skill/tool pihak ketiga, penilaian novelty temuan, responsible disclosure. | 7 |
 
-**Total: 66 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui, 2026-09-13; lihat False Positive Checks).
+**Total: 67 skill** (snapshot kondisi repo saat dokumen ini terakhir diperbarui, 2026-09-15; lihat False Positive Checks).
 
 ## Related Skills
 

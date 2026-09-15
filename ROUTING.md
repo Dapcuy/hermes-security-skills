@@ -19,6 +19,7 @@ Aturan pemakaian:
 | Temuan tidak konsisten / indikasi samar / hasil berubah-ubah | `false-positive-analysis` | `hypothesis-management` |
 | Perlu mengelola dan menilai bukti | `evidence-handling` | `vulnerability-validation` |
 | Menulis laporan / pengunguman temuan ke program | `security-reporting` | `evidence-handling`, `responsible-disclosure` |
+| Need a reviewed local security reference without target I/O | `knowledge-reference-lookup` | `false-positive-analysis`, `evidence-handling` |
 
 ## 2. Discovery — Recon dan Surface Mapping (Pendukung)
 

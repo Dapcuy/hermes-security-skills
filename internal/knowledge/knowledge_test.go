@@ -487,6 +487,17 @@ func TestIngestRejectsTargetControlled(t *testing.T) {
 	}
 }
 
+func TestIngestRejectsTargetControlledCaseVariant(t *testing.T) {
+	s := newTestStore(t)
+	e := sampleEntry("")
+	e.ID = "evil-case-variant"
+	e.Provenance = Provenance{Source: "TARGET-CONTROLLED", Trust: TrustTrusted}
+	src := writeIngestFile(t, e)
+	if _, err := s.Ingest(src, IngestMeta{}); !errors.Is(err, ErrFirewall) {
+		t.Errorf("case variant target-controlled harus ErrFirewall, dapat: %v", err)
+	}
+}
+
 // TestSetStateRejectsUntrustedPromotion: lapisan kedua firewall — file
 // untrusted yang diletakkan manual di direktori knowledge (bukan lewat
 // Ingest) tidak boleh dipromosikan ke reviewed/trusted (§20, §23).

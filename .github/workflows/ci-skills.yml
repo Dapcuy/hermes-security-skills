@@ -6,15 +6,25 @@ on:
   push:
     paths:
       - "skills/**"
+      - "knowledge/**"
+      - "ROUTING.md"
       - "tools/skill-linter/**"
+      - "tools/knowledge-linter/**"
       - "benchmarks/**"
+      - "tests/test_skill_linter.py"
+      - "tests/test_knowledge_linter.py"
       - "tests/benchmark/**"
       - ".github/workflows/ci-skills.yml"
   pull_request:
     paths:
       - "skills/**"
+      - "knowledge/**"
+      - "ROUTING.md"
       - "tools/skill-linter/**"
+      - "tools/knowledge-linter/**"
       - "benchmarks/**"
+      - "tests/test_skill_linter.py"
+      - "tests/test_knowledge_linter.py"
       - "tests/benchmark/**"
       - ".github/workflows/ci-skills.yml"
 
@@ -37,5 +47,8 @@ jobs:
       - name: Jalankan skill-linter terhadap skills/
         run: python tools/skill-linter/lint.py skills/
 
+      - name: Jalankan knowledge-linter terhadap knowledge/
+        run: python tools/knowledge-linter/lint.py knowledge/
+
       - name: Validasi schema dan workflow benchmark
-        run: python -m unittest discover -s tests/benchmark -v
+        run: python -m unittest discover -s tests -v

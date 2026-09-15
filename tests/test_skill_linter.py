@@ -305,7 +305,7 @@ class CoreSkillsTest(unittest.TestCase):
         self.assertTrue(CORE_SKILLS_DIR.is_dir(), "skills/core harus ada")
         res = run_linter(CORE_SKILLS_DIR)
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
-        self.assertIn("7 file diperiksa, 7 lolos, 0 gagal", res.stdout)
+        self.assertIn("8 file diperiksa, 8 lolos, 0 gagal", res.stdout)
 
 
 class RoutingReferenceUnitTest(unittest.TestCase):
