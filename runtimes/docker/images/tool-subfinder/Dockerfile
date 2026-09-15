@@ -33,7 +33,7 @@ RUN git clone --depth 1 --branch "${SUBFINDER_VERSION}" \
       https://github.com/projectdiscovery/subfinder /tmp/subfinder \
  && cd /tmp/subfinder \
  && go mod edit \
-      -require=golang.org/x/crypto@v0.55.0 \
+      -require=golang.org/x/crypto@v0.56.0 \
       -require=golang.org/x/net@v0.56.0 \
       -require=golang.org/x/text@v0.39.0 \
  && go mod tidy \

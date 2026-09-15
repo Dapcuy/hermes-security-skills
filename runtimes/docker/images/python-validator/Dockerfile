@@ -24,6 +24,8 @@ FROM python:3.13-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade \
        gzip=1.13-1+deb13u1 \
+       libc6=2.41-12+deb13u4 \
+       libc-bin=2.41-12+deb13u4 \
        libpcre2-8-0=10.46-1~deb13u2 \
        libsqlite3-0=3.46.1-7+deb13u2 \
        perl-base=5.40.1-6+deb13u1 \

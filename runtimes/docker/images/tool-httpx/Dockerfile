@@ -16,6 +16,8 @@
 #     -t hermes/tool-httpx:dev .
 # =============================================================================
 
+ARG HTTPX_VERSION=v1.12.0
+
 # -----------------------------------------------------------------------------
 # Stage 1 — install httpx versi TER-PIN (pola persis §13.1).
 # JANGAN mengubah versi tanpa review supply chain: versi ini juga di-hardcode
@@ -24,10 +26,17 @@
 # §14 — immutable manifest pin: golang:1.27-bookworm@sha256:<digest>
 # -----------------------------------------------------------------------------
 FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
+ARG HTTPX_VERSION
 # CGO_ENABLED=0 — httpx harus static binary: base runtime distroless STATIC
 # tidak punya dynamic loader (glibc), exec binary dinamis gagal
 # "no such file or directory" saat fork/exec.
-RUN CGO_ENABLED=0 go install -v github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0
+RUN git clone --depth 1 --branch "${HTTPX_VERSION}" \
+      https://github.com/projectdiscovery/httpx /tmp/httpx \
+ && cd /tmp/httpx \
+ && go mod edit -require=golang.org/x/crypto@v0.56.0 \
+ && go mod tidy \
+ && CGO_ENABLED=0 go build -trimpath -o /go/bin/httpx ./cmd/httpx \
+ && rm -rf /tmp/httpx
 
 # -----------------------------------------------------------------------------
 # Stage 1b — build wrapper fail-closed (module kecil terpisah, stdlib only).

@@ -57,7 +57,7 @@ RUN git clone --depth 1 --branch "${NUCLEI_VERSION}" \
  && cd /tmp/nuclei \
  && go mod edit \
       -require=github.com/go-git/go-git/v5@v5.19.2 \
-      -require=golang.org/x/crypto@v0.55.0 \
+      -require=golang.org/x/crypto@v0.56.0 \
       -require=golang.org/x/mod@v0.40.0 \
       -require=google.golang.org/grpc@v1.83.2 \
  && go mod tidy \
