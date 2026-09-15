@@ -520,6 +520,7 @@ hypothesis-management
 vulnerability-validation
 false-positive-analysis
 evidence-handling
+knowledge-reference-lookup
 security-reporting
 ```
 

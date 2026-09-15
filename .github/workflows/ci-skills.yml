@@ -50,5 +50,5 @@ jobs:
       - name: Jalankan knowledge-linter terhadap knowledge/
         run: python tools/knowledge-linter/lint.py knowledge/
 
-      - name: Validasi schema dan workflow benchmark
+      - name: Jalankan seluruh Python regression tests
         run: python -m unittest discover -s tests -v
