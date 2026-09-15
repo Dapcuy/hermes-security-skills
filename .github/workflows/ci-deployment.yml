@@ -89,6 +89,7 @@ jobs:
         with:
           image-ref: hermes-ci/${{ matrix.name }}:${{ github.sha }}
           severity: HIGH,CRITICAL
+          scanners: vuln
           exit-code: "1"
           ignore-unfixed: true
           format: sarif

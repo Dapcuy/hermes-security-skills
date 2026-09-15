@@ -102,6 +102,7 @@ jobs:
         with:
           image-ref: hermes-local/${{ matrix.image }}:ci
           severity: HIGH,CRITICAL
+          scanners: vuln
           exit-code: "1"
           format: sarif
           output: trivy-${{ matrix.image }}.sarif
